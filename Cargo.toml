@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 crossbeam = "0.8.4"
 criterion = { version = "0.5", optional = true }
+libc = {version = "0.2", features = ["extra_traits"] }
 
 [dependencies.nix]
 version  = "0.29"
@@ -15,7 +16,6 @@ features = ["mman", "process"]
 criterion = { version = "0.5", features = ["html_reports"] }
 nix        = "0.29"
 
-
 [features]
 bench = ["criterion"]
 
@@ -23,3 +23,9 @@ bench = ["criterion"]
 name = "process_bench"
 harness = false
 required-features = ["bench"]
+
+[profile.release]
+debug = 2
+split-debuginfo = "off"
+strip = false
+lto = false 

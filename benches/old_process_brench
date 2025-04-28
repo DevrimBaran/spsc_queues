@@ -1,0 +1,664 @@
+#![allow(clippy::cast_possible_truncation)]
+
+use criterion::{criterion_group, criterion_main, Criterion};
+use nix::{
+   libc,
+   sys::wait::waitpid,
+   unistd::{fork, ForkResult},
+};
+
+use spsc_queues::{
+   BQueue, LamportQueue, MultiPushQueue, UnboundedQueue, SpscQueue,
+};
+
+use std::sync::atomic::{Ordering, AtomicU32};
+
+
+const RING_CAP: usize = 1024;
+const ITERS:     usize = 1_000_000;
+
+//── mmap / munmap helpers ─────────────────────────────────────────────────
+
+unsafe fn map_shared(bytes: usize) -> *mut u8 {
+   let ptr = libc::mmap(
+      std::ptr::null_mut(),
+      bytes,
+      libc::PROT_READ | libc::PROT_WRITE,
+      libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+      -1,
+      0,
+   );
+   if ptr == libc::MAP_FAILED {
+      panic!("mmap failed: {}", std::io::Error::last_os_error());
+   }
+   ptr.cast()
+}
+
+unsafe fn unmap_shared(ptr: *mut u8, len: usize) {
+   let ret = libc::munmap(ptr.cast(), len);
+   assert_eq!(ret, 0, "munmap failed: {}", std::io::Error::last_os_error());
+}
+
+//── 1) Lamport ──────────────────────────────────────────────────────────────
+
+fn bench_lamport(c: &mut Criterion) {
+   c.bench_function("Lamport (process)", |b| {
+      b.iter(|| {
+         let bytes   = LamportQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q       = unsafe { LamportQueue::init_in_shared(shm_ptr, RING_CAP) };
+         let dur     = fork_and_run(q);
+         unsafe { unmap_shared(shm_ptr, bytes) };
+         dur
+      })
+   });
+}
+
+//── 2) B-Queue ──────────────────────────────────────────────────────────────
+
+fn bench_bqueue(c: &mut Criterion) {
+   c.bench_function("B-Queue (process)", |b| {
+      b.iter(|| {
+         let bytes   = BQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { BQueue::init_in_shared(shm_ptr, RING_CAP) };
+         let dur = fork_and_run(q);
+         unsafe { unmap_shared(shm_ptr, bytes) };
+         dur
+      })
+   });
+}
+
+//── 3) Multi-Push ──────────────────────────────────────────────────────────
+
+fn bench_mp(c: &mut Criterion) {
+   c.bench_function("Multi-Push (process)", |b| {
+      b.iter(|| {
+         let bytes = MultiPushQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { MultiPushQueue::init_in_shared(shm_ptr, RING_CAP) };
+         let dur = fork_and_run(q);
+         unsafe { unmap_shared(shm_ptr, bytes)};
+         dur
+      })
+   });
+}
+
+//── 4) Unbounded ────────────────────────────────────────────────────────────
+
+
+fn bench_unbounded_simple() {
+   println!("Allocating shared memory...");
+   let size = UnboundedQueue::<usize>::shared_size();
+   println!("Queue size: {} bytes", size);
+   
+   let mem = unsafe {
+       libc::mmap(
+           std::ptr::null_mut(),
+           size,
+           libc::PROT_READ | libc::PROT_WRITE,
+           libc::MAP_ANONYMOUS | libc::MAP_SHARED,
+           -1,
+           0,
+       )
+   };
+   
+   if mem == libc::MAP_FAILED {
+       panic!("Failed to allocate shared memory");
+   }
+   
+   let queue = unsafe { UnboundedQueue::<usize>::init_in_shared(mem as *mut u8) };
+   println!("Queue initialized successfully");
+   
+   // Pre-test basic functionality
+   assert!(queue.prepare_for_use());
+   assert!(queue.push(42).is_ok());
+   
+   match queue.pop() {
+       Ok(val) => assert_eq!(val, 42),
+       Err(_) => panic!("Failed to pop test value"),
+   }
+   
+   println!("Basic functionality verified");
+   
+   // Fork for concurrent test
+   match unsafe { libc::fork() } {
+       -1 => panic!("Fork failed"),
+       0 => {
+           // Child process (producer)
+           println!("[PRODUCER] Starting");
+           
+           // Push 100 items with spin loop retry
+           for i in 0..100 {
+               loop {
+                   match queue.push(i) {
+                       Ok(_) => {
+                           println!("[PRODUCER] Pushed {}", i);
+                           break;
+                       },
+                       Err(_) => std::hint::spin_loop(),
+                   }
+               }
+               
+               // Small delay to prevent overwhelming consumer
+               std::thread::sleep(std::time::Duration::from_millis(5));
+           }
+           
+           println!("[PRODUCER] Complete");
+           unsafe { libc::exit(0) };
+       },
+       _ => {
+           // Parent process (consumer)
+           println!("[CONSUMER] Starting");
+           
+           // Consume 100 items
+           for _ in 0..100 {
+               loop {
+                   match queue.pop() {
+                       Ok(val) => {
+                           println!("[CONSUMER] Received {}", val);
+                           break;
+                       },
+                       Err(_) => std::thread::sleep(std::time::Duration::from_millis(1)),
+                   }
+               }
+           }
+           
+           println!("[CONSUMER] Complete");
+           
+           // Wait for child and clean up
+           let mut status = 0;
+           unsafe { libc::wait(&mut status) };
+           
+           unsafe { libc::munmap(mem, size) };
+       }
+   }
+   
+   println!("All tests passed!");
+}
+
+fn bench_unbounded(c: &mut Criterion) {
+   let mut group = c.benchmark_group("Unbounded (process)");
+   
+   println!("Allocating shared memory...");
+   let size = UnboundedQueue::<usize>::shared_size();
+   println!("Queue size: {} bytes", size);
+   
+   let mem = unsafe {
+       libc::mmap(
+           std::ptr::null_mut(),
+           size,
+           libc::PROT_READ | libc::PROT_WRITE,
+           libc::MAP_ANONYMOUS | libc::MAP_SHARED,
+           -1,
+           0,
+       )
+   };
+   
+   if mem == libc::MAP_FAILED {
+       panic!("Failed to allocate shared memory");
+   }
+   println!("Shared memory allocated at: {:p}", mem);
+   
+   println!("Initializing queue...");
+   let queue = unsafe { UnboundedQueue::<usize>::init_in_shared(mem as *mut u8) };
+   println!("Queue initialized");
+   
+   // Since write_ptr and read_ptr are private, we can't access them directly
+   // Just skip this part or add a debug method to your UnboundedQueue
+   
+   println!("Preparing queue...");
+   if !queue.prepare_for_use() {
+       panic!("Failed to prepare queue for use");
+   }
+   println!("Queue prepared successfully");
+   
+   // First try a simple push/pop test before benchmarking
+   println!("Testing push...");
+   match queue.push(42) {
+       Ok(_) => println!("Push successful"),
+       Err(_) => println!("Push failed"),
+   }
+   
+   println!("Testing pop...");
+   match queue.pop() {
+       Ok(val) => println!("Pop successful: {}", val),
+       Err(_) => println!("Pop failed"),
+   }
+   
+   println!("Starting benchmark...");
+   
+   // Fork the process for producer and consumer
+   match unsafe { libc::fork() } {
+       -1 => panic!("Fork failed"),
+       0 => {
+           // Child process (producer)
+           println!("[PRODUCER] Starting...");
+           
+           let mut i = 0;
+           group.bench_function("producer", |b| {
+               b.iter(|| {
+                   loop {
+                       match queue.push(i) {
+                           Ok(_) => {
+                               i += 1;
+                               break;
+                           },
+                           Err(_) => {
+                               std::hint::spin_loop();
+                           }
+                       }
+                   }
+               })
+           });
+           
+           println!("[PRODUCER] Done.");
+           unsafe { libc::exit(0) };
+       }
+       _ => {
+           // Parent process (consumer)
+           println!("[CONSUMER] Starting...");
+           
+           group.bench_function("consumer", |b| {
+               b.iter(|| {
+                   loop {
+                       match queue.pop() {
+                           Ok(val) => return val,
+                           Err(_) => std::hint::spin_loop(),
+                       }
+                   }
+               })
+           });
+           
+           // Wait for child to finish
+           println!("[CONSUMER] Waiting for producer to finish...");
+           let mut status = 0;
+           unsafe { libc::wait(&mut status) };
+           
+           // Clean up
+           println!("[CONSUMER] Cleaning up...");
+           unsafe { libc::munmap(mem, size) };
+           println!("[CONSUMER] Done.");
+       }
+   }
+   
+   group.finish();
+}
+
+
+//── generic fork-and-run helper ─────────────────────────────────────────────
+
+fn fork_and_run<Q>(q: &'static Q) -> std::time::Duration
+where
+   Q: SpscQueue<usize, PushError = (), PopError = ()> + Sync,
+{
+   // Simple auxiliary synchronization
+   let page_size = 4096;
+   let sync_shm = unsafe { 
+      libc::mmap(
+         std::ptr::null_mut(),
+         page_size,
+         libc::PROT_READ | libc::PROT_WRITE,
+         libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+         -1,
+         0,
+      )
+   };
+   
+   if sync_shm == libc::MAP_FAILED {
+      panic!("Failed to create sync shared memory");
+   }
+   
+   let sync_flag = sync_shm as *mut u32;
+   unsafe { *sync_flag = 0 };
+   
+   match unsafe { fork() }.expect("fork failed") {
+      ForkResult::Child => {
+         // Signal child is ready and wait for parent signal
+         unsafe { *sync_flag = 1 };
+         while unsafe { *sync_flag } < 2 {
+            std::hint::spin_loop();
+         }
+         
+         // Producer code
+         for i in 0..ITERS {
+            // Keep trying until push succeeds
+            while q.push(i).is_err() {
+               std::hint::spin_loop();
+            }
+         }
+         
+         // Signal completion
+         unsafe { *sync_flag = 3 };
+         unsafe { libc::_exit(0) };
+      }
+      ForkResult::Parent { child } => {
+         // Wait for child to signal readiness
+         while unsafe { *sync_flag } < 1 {
+            std::hint::spin_loop();
+         }
+         
+         // Signal ready to start
+         unsafe { *sync_flag = 2 };
+         
+         let start = std::time::Instant::now();
+         let mut count = 0;
+         
+         // Continue until we've read all items or the child signals completion
+         while count < ITERS && unsafe { *sync_flag } < 3 {
+            if let Ok(_) = q.pop() {
+               count += 1;
+            } else {
+               std::hint::spin_loop();
+            }
+         }
+         
+         let dur = start.elapsed();
+         let _ = waitpid(child, None);
+         
+         // Clean up shared memory
+         unsafe { 
+            libc::munmap(sync_shm as *mut libc::c_void, page_size);
+         }
+         
+         dur
+      }
+   }
+}
+
+criterion_group!(
+   benches,
+   //bench_lamport,
+   //bench_bqueue,
+   //bench_mp,
+   bench_unbounded,
+);
+criterion_main!(benches);
+
+fn main() {
+   bench_unbounded_simple();
+}
+
+
+
+// testing code
+//#![allow(clippy::cast_possible_truncation)]
+
+use nix::{
+   libc,
+   sys::wait::waitpid,
+   unistd::{fork, ForkResult},
+};
+
+use spsc_queues::{
+   BQueue, LamportQueue, MultiPushQueue, UnboundedQueue, SpscQueue,
+};
+
+use std::sync::atomic::{Ordering, AtomicU32};
+
+
+const RING_CAP: usize = 1024;
+const ITERS:     usize = 1_000_000;
+
+//── mmap / munmap helpers ─────────────────────────────────────────────────
+
+unsafe fn map_shared(bytes: usize) -> *mut u8 {
+   let ptr = libc::mmap(
+      std::ptr::null_mut(),
+      bytes,
+      libc::PROT_READ | libc::PROT_WRITE,
+      libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+      -1,
+      0,
+   );
+   if ptr == libc::MAP_FAILED {
+      panic!("mmap failed: {}", std::io::Error::last_os_error());
+   }
+   ptr.cast()
+}
+
+unsafe fn unmap_shared(ptr: *mut u8, len: usize) {
+   let ret = libc::munmap(ptr.cast(), len);
+   assert_eq!(ret, 0, "munmap failed: {}", std::io::Error::last_os_error());
+}
+
+
+fn bench_unbounded_simple() {
+   println!("Allocating shared memory...");
+   let size = UnboundedQueue::<usize>::shared_size();
+   println!("Queue size: {} bytes", size);
+   
+   let mem = unsafe {
+       libc::mmap(
+           std::ptr::null_mut(),
+           size,
+           libc::PROT_READ | libc::PROT_WRITE,
+           libc::MAP_ANONYMOUS | libc::MAP_SHARED,
+           -1,
+           0,
+       )
+   };
+   
+   if mem == libc::MAP_FAILED {
+       panic!("Failed to allocate shared memory");
+   }
+   
+   let queue = unsafe { UnboundedQueue::<usize>::init_in_shared(mem as *mut u8) };
+   println!("Queue initialized successfully");
+   
+   // Pre-test basic functionality
+   assert!(queue.prepare_for_use());
+   assert!(queue.push(42).is_ok());
+   
+   match queue.pop() {
+       Ok(val) => assert_eq!(val, 42),
+       Err(_) => panic!("Failed to pop test value"),
+   }
+   
+   println!("Basic functionality verified");
+   
+   // Fork for concurrent test
+   match unsafe { libc::fork() } {
+       -1 => panic!("Fork failed"),
+       0 => {
+           // Child process (producer)
+           println!("[PRODUCER] Starting");
+           
+           // Push 100 items with spin loop retry
+           for i in 0..100 {
+               loop {
+                   match queue.push(i) {
+                       Ok(_) => {
+                           println!("[PRODUCER] Pushed {}", i);
+                           break;
+                       },
+                       Err(_) => std::hint::spin_loop(),
+                   }
+               }
+               
+               // Small delay to prevent overwhelming consumer
+               std::thread::sleep(std::time::Duration::from_millis(5));
+           }
+           
+           println!("[PRODUCER] Complete");
+           unsafe { libc::exit(0) };
+       },
+       _ => {
+           // Parent process (consumer)
+           println!("[CONSUMER] Starting");
+           
+           // Consume 100 items
+           for _ in 0..100 {
+               loop {
+                   match queue.pop() {
+                       Ok(val) => {
+                           println!("[CONSUMER] Received {}", val);
+                           break;
+                       },
+                       Err(_) => std::thread::sleep(std::time::Duration::from_millis(1)),
+                   }
+               }
+           }
+           
+           println!("[CONSUMER] Complete");
+           
+           // Wait for child and clean up
+           let mut status = 0;
+           unsafe { libc::wait(&mut status) };
+           
+           unsafe { libc::munmap(mem, size) };
+       }
+   }
+   
+   println!("All tests passed!");
+}
+
+
+//── generic fork-and-run helper ─────────────────────────────────────────────
+
+fn fork_and_run<Q>(q: &'static Q) -> std::time::Duration
+where
+   Q: SpscQueue<usize, PushError = (), PopError = ()> + Sync,
+{
+   // Simple auxiliary synchronization
+   let page_size = 4096;
+   let sync_shm = unsafe { 
+      libc::mmap(
+         std::ptr::null_mut(),
+         page_size,
+         libc::PROT_READ | libc::PROT_WRITE,
+         libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+         -1,
+         0,
+      )
+   };
+   
+   if sync_shm == libc::MAP_FAILED {
+      panic!("Failed to create sync shared memory");
+   }
+   
+   let sync_flag = sync_shm as *mut u32;
+   unsafe { *sync_flag = 0 };
+   
+   match unsafe { fork() }.expect("fork failed") {
+      ForkResult::Child => {
+         // Signal child is ready and wait for parent signal
+         unsafe { *sync_flag = 1 };
+         while unsafe { *sync_flag } < 2 {
+            std::hint::spin_loop();
+         }
+         
+         // Producer code
+         for i in 0..ITERS {
+            // Keep trying until push succeeds
+            while q.push(i).is_err() {
+               std::hint::spin_loop();
+            }
+         }
+         
+         // Signal completion
+         unsafe { *sync_flag = 3 };
+         unsafe { libc::_exit(0) };
+      }
+      ForkResult::Parent { child } => {
+         // Wait for child to signal readiness
+         while unsafe { *sync_flag } < 1 {
+            std::hint::spin_loop();
+         }
+         
+         // Signal ready to start
+         unsafe { *sync_flag = 2 };
+         
+         let start = std::time::Instant::now();
+         let mut count = 0;
+         
+         // Continue until we've read all items or the child signals completion
+         while count < ITERS && unsafe { *sync_flag } < 3 {
+            if let Ok(_) = q.pop() {
+               count += 1;
+            } else {
+               std::hint::spin_loop();
+            }
+         }
+         
+         let dur = start.elapsed();
+         let _ = waitpid(child, None);
+         
+         // Clean up shared memory
+         unsafe { 
+            libc::munmap(sync_shm as *mut libc::c_void, page_size);
+         }
+         
+         dur
+      }
+   }
+}
+
+fn main() {
+   bench_unbounded_simple();
+}
+
+use nix::libc;
+use spsc_queues::UnboundedQueue;
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    println!("=== Simple Queue Test with Debugging ===");
+    
+    println!("Allocating shared memory...");
+    let size = UnboundedQueue::<usize>::shared_size();
+    println!("Queue size: {} bytes", size);
+    
+    let mem = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_ANONYMOUS | libc::MAP_SHARED,
+            -1,
+            0,
+        )
+    };
+    
+    if mem == libc::MAP_FAILED {
+        panic!("Failed to allocate shared memory");
+    }
+    println!("Memory allocated at: {:p}", mem);
+    
+    println!("Initializing queue...");
+    let queue = unsafe { UnboundedQueue::<usize>::init_in_shared(mem as *mut u8) };
+    println!("Queue initialized");
+    
+    // Test preparation
+    println!("Preparing queue for use...");
+    let prepared = queue.prepare_for_use();
+    println!("Queue prepared: {}", prepared);
+    if !prepared {
+        panic!("Failed to prepare queue");
+    }
+    
+    // Simple push test
+    println!("Pushing value 42...");
+    let push_result = queue.push_debug(42); // Use debug version for more info
+    match push_result {
+        Ok(_) => println!("Push successful"),
+        Err(_) => panic!("Failed to push value"),
+    }
+    
+    // Simple pop test
+    println!("Popping value...");
+    let pop_result = queue.pop_debug(); // Use debug version for more info
+    match pop_result {
+        Ok(val) => println!("Popped value: {}", val),
+        Err(_) => panic!("Failed to pop value"),
+    }
+    
+    println!("Basic operations passed!");
+    
+    // Clean up
+    println!("Cleaning up shared memory");
+    unsafe { libc::munmap(mem, size) };
+    
+    println!("Test complete!");
+}

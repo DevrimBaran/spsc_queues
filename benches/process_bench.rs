@@ -1,25 +1,26 @@
-// Process-based SPSC benchmark for my queues
-// This benchmark uses `fork` to create a child process that pushes
-// items into the queue, while the parent process pops items from it
-// TODO: add a benchmark for all spsc queues
-
 #![allow(clippy::cast_possible_truncation)]
 
-use std::time::Instant;
-
 use criterion::{criterion_group, criterion_main, Criterion};
+use std::time::Duration;
+use std::ptr;
 use nix::{
-   libc,                       // raw mmap/munmap constants
+   libc,
    sys::wait::waitpid,
    unistd::{fork, ForkResult},
 };
 
-use spsc_queues::{LamportQueue, SpscQueue};
+use spsc_queues::{
+   BQueue, LamportQueue, MultiPushQueue, UnboundedQueue, SpscQueue,
+};
 
-const RING_CAP: usize = 1024;         // power-of-two
-const ITERS: usize = 1_000_000;
+use std::sync::atomic::{Ordering, AtomicU32};
 
-// create a shared memory block of `bytes` size for the used processes
+
+const RING_CAP: usize = 1024;
+const ITERS:     usize = 1_000_000;
+
+//── mmap / munmap helpers ─────────────────────────────────────────────────
+
 unsafe fn map_shared(bytes: usize) -> *mut u8 {
    let ptr = libc::mmap(
       std::ptr::null_mut(),
@@ -35,64 +36,181 @@ unsafe fn map_shared(bytes: usize) -> *mut u8 {
    ptr.cast()
 }
 
-// unmap the shared memory block
 unsafe fn unmap_shared(ptr: *mut u8, len: usize) {
    let ret = libc::munmap(ptr.cast(), len);
    assert_eq!(ret, 0, "munmap failed: {}", std::io::Error::last_os_error());
 }
 
-// actual benchmark function
+//── 1) Lamport ──────────────────────────────────────────────────────────────
 
-fn lamport_process_bench(c: &mut Criterion) {
-   c.bench_function("lamport/forked push+pop", |b| {
+fn bench_lamport(c: &mut Criterion) {
+   c.bench_function("Lamport (process)", |b| {
       b.iter(|| {
-         // allocate & build queue in shared memory
          let bytes   = LamportQueue::<usize>::shared_size(RING_CAP);
          let shm_ptr = unsafe { map_shared(bytes) };
-
-         let q = unsafe { LamportQueue::init_in_shared(shm_ptr, RING_CAP) };
-
-         // fork – child pushes, parent pops
-         // since we only want to test the performance of the queues, we can use fork to get a second process that automatically shares the same memory
-         // child parent relationship irrelevant for the benchmark, for the kernel they are just two processes that share the same memory,
-         // which would be the case for any other process that uses the queue.
-         // after the fork, each process (reader and writer) will enter its own loop at the same time. So we mimic the behavior of two different processes that run side by side
-         match unsafe { fork() }.expect("fork failed") {
-            // producer process
-            ForkResult::Child => {
-               for i in 0..ITERS {
-                  while q.push(i).is_err() {
-                        std::hint::spin_loop();
-                  }
-               }
-               unsafe { libc::_exit(0) };
-            }
-            // consumer process
-            ForkResult::Parent { child } => {
-               // start the timer (since the parent process starts immediately after we start the child process both processes will run at the same time). 
-               // So we actually measure the time it takes to push and pop the items from the queue.
-               let start = Instant::now(); 
-               let mut got = 0usize;
-
-               while got < ITERS {
-                  if q.pop().is_ok() {
-                        got += 1;
-                  } else {
-                        std::hint::spin_loop();
-                  }
-               }
-               let elapsed = start.elapsed();
-
-               // reap child and unmap shared memory
-               let _ = waitpid(child, None);
-               unsafe { unmap_shared(shm_ptr, bytes) };
-
-               elapsed // Criterion uses this Duration for its statistics
-            }
-         }
-      });
+         let q       = unsafe { LamportQueue::init_in_shared(shm_ptr, RING_CAP) };
+         let dur     = fork_and_run(q);
+         unsafe { unmap_shared(shm_ptr, bytes) };
+         dur
+      })
    });
 }
 
-criterion_group!(benches, lamport_process_bench);
+//── 2) B-Queue ──────────────────────────────────────────────────────────────
+
+fn bench_bqueue(c: &mut Criterion) {
+   c.bench_function("B-Queue (process)", |b| {
+      b.iter(|| {
+         let bytes   = BQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { BQueue::init_in_shared(shm_ptr, RING_CAP) };
+         let dur = fork_and_run(q);
+         unsafe { unmap_shared(shm_ptr, bytes) };
+         dur
+      })
+   });
+}
+
+//── 3) Multi-Push ──────────────────────────────────────────────────────────
+
+fn bench_mp(c: &mut Criterion) {
+   c.bench_function("Multi-Push (process)", |b| {
+       b.iter(|| {
+           // 1) mmap & init in shared memory
+           let bytes   = MultiPushQueue::<usize>::shared_size(RING_CAP);
+           let shm_ptr = unsafe { map_shared(bytes) };
+           let q       = unsafe { MultiPushQueue::init_in_shared(shm_ptr, RING_CAP) };
+
+           // grab a raw pointer so we can run Drop in-place later
+           let q_ptr: *mut MultiPushQueue<usize> = q;
+
+           // 2) do the fork-and-run measurement
+           let dur = fork_and_run(q);
+
+           // 3) explicitly drop the queue in-place, then unmap
+           unsafe {
+               ptr::drop_in_place(q_ptr);
+               unmap_shared(shm_ptr, bytes);
+           }
+
+           dur
+       })
+   });
+}
+
+//── 4) Unbounded ────────────────────────────────────────────────────────────
+
+fn bench_unbounded(c: &mut Criterion) {
+   // allocate and initialize shared queue
+   let size = UnboundedQueue::<usize>::shared_size();
+   let shm = unsafe { map_shared(size) };
+   let queue = unsafe { UnboundedQueue::init_in_shared(shm) };
+
+   // let criterion drive a single fork-and-run per sample
+   c.bench_function("Unbounded (process)", |b| {
+       b.iter(|| {
+           let dur = fork_and_run(queue);
+           // cleanup between runs if you like:
+           // unsafe { unmap_shared(shm, size) };
+           dur
+       })
+   });
+}
+
+
+//── generic fork-and-run helper ─────────────────────────────────────────────
+
+fn fork_and_run<Q>(q: &'static Q) -> std::time::Duration
+where
+   Q: SpscQueue<usize, PushError = (), PopError = ()> + Sync,
+{
+   // Simple auxiliary synchronization
+   let page_size = 4096;
+   let sync_shm = unsafe { 
+      libc::mmap(
+         std::ptr::null_mut(),
+         page_size,
+         libc::PROT_READ | libc::PROT_WRITE,
+         libc::MAP_SHARED | libc::MAP_ANONYMOUS,
+         -1,
+         0,
+      )
+   };
+   
+   if sync_shm == libc::MAP_FAILED {
+      panic!("Failed to create sync shared memory");
+   }
+   
+   let sync_flag = sync_shm as *mut u32;
+   unsafe { *sync_flag = 0 };
+   
+   match unsafe { fork() }.expect("fork failed") {
+      ForkResult::Child => {
+         // Signal child is ready and wait for parent signal
+         unsafe { *sync_flag = 1 };
+         while unsafe { *sync_flag } < 2 {
+            std::hint::spin_loop();
+         }
+         
+         // Producer code
+         for i in 0..ITERS {
+            // Keep trying until push succeeds
+            while q.push(i).is_err() {
+               std::hint::spin_loop();
+            }
+         }
+         
+         // Signal completion
+         unsafe { *sync_flag = 3 };
+         unsafe { libc::_exit(0) };
+      }
+      ForkResult::Parent { child } => {
+         // Wait for child to signal readiness
+         while unsafe { *sync_flag } < 1 {
+            std::hint::spin_loop();
+         }
+         
+         // Signal ready to start
+         unsafe { *sync_flag = 2 };
+         
+         let start = std::time::Instant::now();
+         let mut count = 0;
+         
+         // Continue until we've read all items or the child signals completion
+         while count < ITERS && unsafe { *sync_flag } < 3 {
+            if let Ok(_) = q.pop() {
+               count += 1;
+            } else {
+               std::hint::spin_loop();
+            }
+         }
+         
+         let dur = start.elapsed();
+         let _ = waitpid(child, None);
+         
+         // Clean up shared memory
+         unsafe { 
+            libc::munmap(sync_shm as *mut libc::c_void, page_size);
+         }
+         
+         dur
+      }
+   }
+}
+
+fn custom_criterion() -> Criterion {
+   Criterion::default()
+      .warm_up_time(Duration::from_secs(5))
+      .measurement_time(Duration::from_secs(10))
+}
+
+criterion_group!{
+   name = benches;
+   config = custom_criterion();
+   targets =
+      bench_lamport,
+      bench_bqueue,
+      bench_mp,
+      bench_unbounded
+}
 criterion_main!(benches);

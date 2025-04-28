@@ -18,6 +18,9 @@ pub struct BQueue<T: Send + 'static> {
    c_commit: AtomicUsize,
 }
 
+unsafe impl<T: Send> Sync for BQueue<T> {}
+unsafe impl<T: Send> Send for BQueue<T> {}
+
 impl<T: Send + 'static> BQueue<T> {
    /// Capacity must be a power of two and ≥ `BS`.
    pub fn new(capacity: usize) -> Self {
@@ -30,6 +33,29 @@ impl<T: Send + 'static> BQueue<T> {
          p_commit: AtomicUsize::new(0),
          c_commit: AtomicUsize::new(0),
       }
+   }
+   pub unsafe fn init_in_shared(mem: *mut u8, cap: usize) -> &'static mut Self {
+      use std::{mem::MaybeUninit, ptr};
+      // layout: header ⟶ Lamport ring directly afterwards
+      let header_ptr = mem as *mut MaybeUninit<Self>;
+      let ring_ptr   = mem.add(std::mem::size_of::<Self>());
+      let ring= LamportQueue::init_in_shared(ring_ptr, cap);
+      ptr::write(
+         header_ptr,
+         MaybeUninit::new(Self {
+            ring: ptr::read(ring),          //  ⇦ this line changed
+            p_cnt: Cell::new(0),
+            c_cnt: Cell::new(0),
+            p_commit: AtomicUsize::new(0),
+            c_commit: AtomicUsize::new(0),
+         }),
+      );
+      &mut *(*header_ptr).as_mut_ptr()
+   }
+   
+   /// Bytes needed for a queue with `cap` elements (header + Lamport ring).
+   pub const fn shared_size(cap: usize) -> usize {
+         std::mem::size_of::<Self>() + LamportQueue::<T>::shared_size(cap)
    }
 }
 

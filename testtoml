@@ -1,0 +1,3 @@
+[[bin]]
+name = "simple-test"
+path = "benches/process_bench_test.rs"

@@ -1,0 +1,53 @@
+   Compiling spsc_queues v0.1.0 (/home/baran/Dokumente/Uni/MA/spsc_queues)
+warning: unused imports: `AtomicU32` and `Ordering`
+  --> benches/process_bench.rs:16:25
+   |
+16 | use std::sync::atomic::{Ordering, AtomicU32};
+   |                         ^^^^^^^^  ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: `spsc_queues` (bench "process_bench") generated 1 warning (run `cargo fix --bench "process_bench"` to apply 1 suggestion)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 1.46s
+     Running benches/process_bench.rs (target/x86_64-unknown-linux-gnu/release/deps/process_bench-68ae8a52fe1411ef)
+Benchmarking Lamport (process)
+Benchmarking Lamport (process): Warming up for 5.0000 s
+Benchmarking Lamport (process): Collecting 100 samples in estimated 11.184 s (600 iterations)
+Benchmarking Lamport (process): Analyzing
+Lamport (process)       time:   [18.293 ms 18.692 ms 19.095 ms]
+                        change: [+0.2885% +3.1138% +6.2500%] (p = 0.04 < 0.05)
+                        Change within noise threshold.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+
+Benchmarking B-Queue (process)
+Benchmarking B-Queue (process): Warming up for 5.0000 s
+Benchmarking B-Queue (process): Collecting 100 samples in estimated 10.012 s (300 iterations)
+Benchmarking B-Queue (process): Analyzing
+B-Queue (process)       time:   [31.206 ms 31.787 ms 32.403 ms]
+                        change: [+1.8552% +4.1609% +6.2898%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+
+Benchmarking Multi-Push (process)
+Benchmarking Multi-Push (process): Warming up for 5.0000 s
+Benchmarking Multi-Push (process): Collecting 100 samples in estimated 15.491 s (200 iterations)
+Benchmarking Multi-Push (process): Analyzing
+Multi-Push (process)    time:   [72.286 ms 73.643 ms 74.993 ms]
+                        change: [-2.5055% -0.0056% +2.4968%] (p = 1.00 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+
+Benchmarking Unbounded (process)
+Benchmarking Unbounded (process): Warming up for 5.0000 s
+Benchmarking Unbounded (process): Collecting 100 samples in estimated 16.517 s (200 iterations)
+Benchmarking Unbounded (process): Analyzing
+Unbounded (process)     time:   [82.088 ms 82.741 ms 83.415 ms]
+                        change: [+1.1653% +2.3795% +3.6568%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 11 outliers among 100 measurements (11.00%)
+  11 (11.00%) high mild
+
