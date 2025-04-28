@@ -1,4 +1,5 @@
-// src/spsc/mspsc.rs
+// multi push spsc queue from Torquati
+
 use crate::spsc::LamportQueue;
 use crate::SpscQueue;
 use std::{
@@ -75,8 +76,7 @@ impl<T: Send + 'static> MultiPushQueue<T> {
         unsafe { &mut *self.inner }
     }
 
-    // Wait-free flush operation: flushes as many items as possible
-    // but doesn't wait if the queue is full
+    // flush operation: flushes as many items as possible
     #[inline]
     fn flush_local(&self) -> bool {
         let buf = unsafe { &mut *self.local_buf.get() };
@@ -109,7 +109,7 @@ impl<T: Send + 'static> MultiPushQueue<T> {
                 new_count = i;
                 flushed = true;
             } else {
-                // Push failed - we do NOT need to restore the item
+                // Push failed - we do not need to restore the item
                 // because we used ptr::read which makes a copy
                 break;
             }
@@ -237,8 +237,8 @@ impl<T: Send + 'static> SpscQueue<T> for MultiPushQueue<T> {
 impl<T: Send> fmt::Debug for MultiPushQueue<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MultiPushQueue")
-         .field("shared", &self.shared.load(Ordering::Relaxed))
-         .field("local_count", &self.local_count.load(Ordering::Relaxed))
-         .finish()
+        .field("shared", &self.shared.load(Ordering::Relaxed))
+        .field("local_count", &self.local_count.load(Ordering::Relaxed))
+        .finish()
     }
 }

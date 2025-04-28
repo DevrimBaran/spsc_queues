@@ -1,35 +1,29 @@
-// Wait-free bounded single-producer / single-consumer (SPSC) queue
-//
-// Direct Rust translation of Leslie Lamport's 1979 ring-buffer algorithm.
-// All operations are *wait-free* (bounded number of steps) and therefore
-// also lock-free.
+// lamports buffer ring
 
 use crate::SpscQueue;
 use std::{
    cell::UnsafeCell,
-   mem::ManuallyDrop,                 // ▸ to suppress automatic drop
+   mem::ManuallyDrop,
    sync::atomic::{AtomicUsize, Ordering},
 };
 
-/*──────────────────────────────────────────────────────────────────────────*/
-/*  Ring header                                                             */
-/*──────────────────────────────────────────────────────────────────────────*/
+// Ring header
 
 #[derive(Debug)]
 pub struct LamportQueue<T: Send> {
-   mask: usize,                                     // cap − 1
+   mask: usize, // cap − 1
    buf : ManuallyDrop<Box<[UnsafeCell<Option<T>>]>>, // shared ring storage
-   head: AtomicUsize,                               // mutated by consumer
-   tail: AtomicUsize,                               // mutated by producer
+   head: AtomicUsize, // mutated by consumer
+   tail: AtomicUsize, // mutated by producer
 }
 
 unsafe impl<T: Send> Sync for LamportQueue<T> {}
 unsafe impl<T: Send> Send for LamportQueue<T> {}
 
-/*────────────────────────  heap-backed constructor  ───────────────────────*/
+// heap-backed constructor
 
 impl<T: Send> LamportQueue<T> {
-   /// Build a queue that lives on the Rust heap.
+   // Build a queue that lives on the Rust heap.
    pub fn with_capacity(cap: usize) -> Self {
       assert!(cap.is_power_of_two(), "capacity must be power of two");
 
@@ -40,7 +34,7 @@ impl<T: Send> LamportQueue<T> {
 
       Self {
          mask: cap - 1,
-         buf : ManuallyDrop::new(boxed),           // ▸ wrapped
+         buf : ManuallyDrop::new(boxed),
          head: AtomicUsize::new(0),
          tail: AtomicUsize::new(0),
       }
@@ -52,7 +46,7 @@ impl<T: Send> LamportQueue<T> {
    }
 }
 
-/*──────────────  shared-memory in-place constructor  ──────────────────────*/
+// shared-memory in-place constructor
 
 impl<T: Send> LamportQueue<T> {
    /// Bytes required for header + `cap` elements.
@@ -61,9 +55,9 @@ impl<T: Send> LamportQueue<T> {
       + cap * std::mem::size_of::<UnsafeCell<Option<T>>>()
    }
 
-   /// # Safety
-   /// `mem` must point to a writable, process-shared mapping of at least
-   /// `shared_size(cap)` bytes which lives for `'static`.
+   // Safety
+   // `mem` must point to a writable, process-shared mapping of at least
+   // `shared_size(cap)` bytes which lives for `'static`.
    pub unsafe fn init_in_shared(mem: *mut u8, cap: usize) -> &'static mut Self {
       assert!(cap.is_power_of_two());
 
@@ -76,7 +70,7 @@ impl<T: Send> LamportQueue<T> {
 
       header.write(Self {
          mask: cap - 1,
-         buf : ManuallyDrop::new(boxed),           // ▸ wrapped
+         buf : ManuallyDrop::new(boxed),
          head: AtomicUsize::new(0),
          tail: AtomicUsize::new(0),
       });
@@ -85,7 +79,7 @@ impl<T: Send> LamportQueue<T> {
    }
 }
 
-/*──────────────────────────── queue operations ────────────────────────────*/
+// queue operations
 
 impl<T: Send + 'static> SpscQueue<T> for LamportQueue<T> {
    type PushError = ();

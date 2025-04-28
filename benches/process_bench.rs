@@ -40,7 +40,7 @@ unsafe fn unmap_shared(ptr: *mut u8, len: usize) {
    assert_eq!(ret, 0, "munmap failed: {}", std::io::Error::last_os_error());
 }
 
-//── 1) Lamport ──────────────────────────────────────────────────────────────
+// Lamport
 
 fn bench_lamport(c: &mut Criterion) {
    c.bench_function("Lamport (process)", |b| {
@@ -55,8 +55,7 @@ fn bench_lamport(c: &mut Criterion) {
    });
 }
 
-//── 2) B-Queue ──────────────────────────────────────────────────────────────
-
+// B-Queue
 fn bench_bqueue(c: &mut Criterion) {
    c.bench_function("B-Queue (process)", |b| {
       b.iter(|| {
@@ -70,7 +69,7 @@ fn bench_bqueue(c: &mut Criterion) {
    });
 }
 
-//── 3) Multi-Push ──────────────────────────────────────────────────────────
+// Multi-Push (mspsc)
 
 fn bench_mp(c: &mut Criterion) {
    c.bench_function("Multi-Push (process)", |b| {
@@ -108,7 +107,7 @@ fn bench_dspsc(c: &mut Criterion) {
    });
 }
 
-//── 4) Unbounded ────────────────────────────────────────────────────────────
+// Unbounded spsc
 
 fn bench_unbounded(c: &mut Criterion) {
    // allocate and initialize shared queue
@@ -128,7 +127,7 @@ fn bench_unbounded(c: &mut Criterion) {
 }
 
 
-//── generic fork-and-run helper ─────────────────────────────────────────────
+// generic fork-and-run helper
 
 fn fork_and_run<Q>(q: &'static Q) -> std::time::Duration
 where
@@ -218,10 +217,10 @@ criterion_group!{
    name = benches;
    config = custom_criterion();
    targets =
-      bench_lamport,
+      //bench_lamport,
       bench_bqueue,
-      bench_mp,
-      bench_unbounded,
-      bench_dspsc
+      //bench_mp,
+      //bench_unbounded,
+      //bench_dspsc
 }
 criterion_main!(benches);

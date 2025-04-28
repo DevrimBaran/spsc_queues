@@ -1,4 +1,4 @@
-// dSPSC – dynamic list with node cache - wait-free implementation
+// dSPSC – dynamic list with node cache from Torquati
 use crate::SpscQueue;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
@@ -12,8 +12,8 @@ struct Node<T> {
 }
 
 pub struct DynListQueue<T: Send + 'static> {
-    head: AtomicPtr<Node<T>>,      // consumer reads
-    tail: AtomicPtr<Node<T>>,      // producer writes
+    head: AtomicPtr<Node<T>>, // consumer reads
+    tail: AtomicPtr<Node<T>>, // producer writes
     // Pre-allocated node storage - use UnsafeCell for interior mutability
     nodes_storage: Box<[u8]>,      // Raw memory for nodes
     nodes_ptr: AtomicPtr<Node<T>>, // Pointer to the first node
@@ -68,7 +68,7 @@ impl<T: Send + 'static> DynListQueue<T> {
         }
     }
     
-    // Wait-free node allocation - always succeeds in bounded time
+    // node allocation - succeeds in bounded time
     fn alloc_node(&self, v: T) -> *mut Node<T> {
         // First try to use a recycled node
         let recycled_count = self.recycled_count.load(Ordering::Relaxed);
@@ -115,7 +115,7 @@ impl<T: Send + 'static> DynListQueue<T> {
         Box::into_raw(Box::new(Node{val: Some(v), next: null_mut()}))
     }
     
-    // Wait-free recycle operation - stores node for reuse
+    // recycle operation - stores node for reuse
     fn recycle_node(&self, node: *mut Node<T>) {
         let recycled_count = self.recycled_count.load(Ordering::Relaxed);
         if recycled_count < PREALLOCATED_NODES {
