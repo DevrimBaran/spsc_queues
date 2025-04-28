@@ -1,4 +1,3 @@
-   Compiling spsc_queues v0.1.0 (/home/baran/Dokumente/Uni/MA/spsc_queues)
 warning: field `nodes_storage` is never read
   --> src/spsc/dspsc.rs:18:5
    |
@@ -50,52 +49,103 @@ warning: methods `pool_pop_prod_nonblocking` and `pool_push_prod` are never used
     |       ^^^^^^^^^^^^^^
 
 warning: `spsc_queues` (lib) generated 5 warnings
+   Compiling spsc_queues v0.1.0 (/home/baran/Dokumente/Uni/MA/spsc_queues)
 warning: unused imports: `AtomicU32` and `Ordering`
-  --> benches/process_bench.rs:16:25
+  --> benches/process_bench.rs:15:25
    |
-16 | use std::sync::atomic::{Ordering, AtomicU32};
+15 | use std::sync::atomic::{Ordering, AtomicU32};
    |                         ^^^^^^^^  ^^^^^^^^^
    |
    = note: `#[warn(unused_imports)]` on by default
 
-warning: `spsc_queues` (bench "process_bench") generated 1 warning (run `cargo fix --bench "process_bench"` to apply 1 suggestion)
-    Finished `bench` profile [optimized + debuginfo] target(s) in 1.48s
+warning: constant `RING_CAP` is never used
+  --> benches/process_bench.rs:18:7
+   |
+18 | const RING_CAP: usize = 1024;
+   |       ^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `map_shared` is never used
+  --> benches/process_bench.rs:23:11
+   |
+23 | unsafe fn map_shared(bytes: usize) -> *mut u8 {
+   |           ^^^^^^^^^^
+
+warning: function `unmap_shared` is never used
+  --> benches/process_bench.rs:38:11
+   |
+38 | unsafe fn unmap_shared(ptr: *mut u8, len: usize) {
+   |           ^^^^^^^^^^^^
+
+warning: function `bench_lamport` is never used
+  --> benches/process_bench.rs:45:4
+   |
+45 | fn bench_lamport(c: &mut Criterion) {
+   |    ^^^^^^^^^^^^^
+
+warning: function `bench_bqueue` is never used
+  --> benches/process_bench.rs:60:4
+   |
+60 | fn bench_bqueue(c: &mut Criterion) {
+   |    ^^^^^^^^^^^^
+
+warning: function `bench_mp` is never used
+  --> benches/process_bench.rs:75:4
+   |
+75 | fn bench_mp(c: &mut Criterion) {
+   |    ^^^^^^^^
+
+warning: function `bench_unbounded` is never used
+   --> benches/process_bench.rs:113:4
+    |
+113 | fn bench_unbounded(c: &mut Criterion) {
+    |    ^^^^^^^^^^^^^^^
+
+warning: `spsc_queues` (bench "process_bench") generated 8 warnings (run `cargo fix --bench "process_bench"` to apply 1 suggestion)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 1.27s
      Running benches/process_bench.rs (target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666)
-Benchmarking Lamport (process)
-Benchmarking Lamport (process): Warming up for 5.0000 s
-Benchmarking Lamport (process): Collecting 100 samples in estimated 10.969 s (600 iterations)
-Benchmarking Lamport (process): Analyzing
-Lamport (process)       time:   [18.574 ms 19.060 ms 19.586 ms]
-                        change: [-1.4072% +1.9695% +5.3391%] (p = 0.27 > 0.05)
-                        No change in performance detected.
-Found 6 outliers among 100 measurements (6.00%)
-  4 (4.00%) high mild
+Benchmarking dSPSC (process)
+Benchmarking dSPSC (process): Warming up for 5.0000 s
+Benchmarking dSPSC (process): Collecting 100 samples in estimated 17.242 s (200 iterations)
+Benchmarking dSPSC (process): Analyzing
+dSPSC (process)         time:   [79.179 ms 79.550 ms 79.972 ms]
+                        change: [+1.6948% +2.3535% +3.0197%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) high mild
   2 (2.00%) high severe
 
-Benchmarking B-Queue (process)
-Benchmarking B-Queue (process): Warming up for 5.0000 s
-Benchmarking B-Queue (process): Collecting 100 samples in estimated 12.829 s (400 iterations)
-Benchmarking B-Queue (process): Analyzing
-B-Queue (process)       time:   [32.067 ms 32.519 ms 33.013 ms]
-                        change: [-0.0869% +2.3005% +4.8809%] (p = 0.06 > 0.05)
-                        No change in performance detected.
-Found 5 outliers among 100 measurements (5.00%)
-  3 (3.00%) high mild
-  2 (2.00%) high severe
 
-Benchmarking Multi-Push (process)
-Benchmarking Multi-Push (process): Warming up for 5.0000 s
-Benchmarking Multi-Push (process): Collecting 100 samples in estimated 12.307 s (200 iterations)
-Benchmarking Multi-Push (process): Analyzing
-Multi-Push (process)    time:   [61.701 ms 62.598 ms 63.499 ms]
-                        change: [-17.046% -14.999% -13.098%] (p = 0.00 < 0.05)
-                        Performance has improved.
+=================================================================
+==341095==ERROR: LeakSanitizer: detected memory leaks
 
-Benchmarking Unbounded (process)
-Benchmarking Unbounded (process): Warming up for 5.0000 s
-Benchmarking Unbounded (process): Collecting 100 samples in estimated 10.014 s (300 iterations)
-Benchmarking Unbounded (process): Analyzing
-Unbounded (process)     time:   [34.241 ms 34.865 ms 35.512 ms]
-                        change: [-58.722% -57.862% -57.093%] (p = 0.00 < 0.05)
-                        Performance has improved.
+Direct leak of 72 byte(s) in 1 object(s) allocated from:
+    #0 0x56f7da8f5cb4  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x27fcb4) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #1 0x56f7dae1cc08  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x7a6c08) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #2 0x56f7da967318  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x2f1318) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #3 0x56f7da97f0f2  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x3090f2) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
 
+Indirect leak of 768 byte(s) in 1 object(s) allocated from:
+    #0 0x56f7da8f5e89  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x27fe89) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #1 0x56f7dae1cf41  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x7a6f41) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #2 0x56f7da96ae2a  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x2f4e2a) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #3 0x56f7da97f0f2  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x3090f2) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+
+Indirect leak of 256 byte(s) in 1 object(s) allocated from:
+    #0 0x56f7da8f5cb4  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x27fcb4) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #1 0x56f7dae1cc08  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x7a6c08) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #2 0x56f7da96ae6f  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x2f4e6f) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #3 0x56f7da97f0f2  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x3090f2) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+
+Indirect leak of 24 byte(s) in 1 object(s) allocated from:
+    #0 0x56f7da8f5cb4  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x27fcb4) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #1 0x56f7dae1cc08  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x7a6c08) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #2 0x56f7da966c3c  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x2f0c3c) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+    #3 0x56f7da97f0f2  (/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666+0x3090f2) (BuildId: 30e5c4323b205f911bdda8b92860a5e19f566cbf)
+
+SUMMARY: AddressSanitizer: 1120 byte(s) leaked in 4 allocation(s).
+error: bench failed, to rerun pass `--bench process_bench`
+
+Caused by:
+  process didn't exit successfully: `/home/baran/Dokumente/Uni/MA/spsc_queues/target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666 --bench` (exit status: 1)

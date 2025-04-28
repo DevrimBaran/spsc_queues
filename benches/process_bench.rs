@@ -10,16 +10,15 @@ use nix::{
 };
 
 use spsc_queues::{
-   BQueue, LamportQueue, MultiPushQueue, UnboundedQueue, SpscQueue,
+   BQueue, LamportQueue, MultiPushQueue, UnboundedQueue, SpscQueue, DynListQueue
 };
-
 use std::sync::atomic::{Ordering, AtomicU32};
 
 
 const RING_CAP: usize = 1024;
 const ITERS:     usize = 1_000_000;
 
-//── mmap / munmap helpers ─────────────────────────────────────────────────
+//mmap / munmap helpers
 
 unsafe fn map_shared(bytes: usize) -> *mut u8 {
    let ptr = libc::mmap(
@@ -95,6 +94,17 @@ fn bench_mp(c: &mut Criterion) {
 
            dur
        })
+   });
+}
+
+// dspsc
+
+fn bench_dspsc(c: &mut Criterion) {
+   // allocate and initialize shared DynListQueue (no shared mapping needed)
+   let queue: &'static DynListQueue<usize> = Box::leak(Box::new(DynListQueue::new(32)));
+
+   c.bench_function("dSPSC (process)", move |b|{
+       b.iter(|| fork_and_run(queue))
    });
 }
 
@@ -211,6 +221,7 @@ criterion_group!{
       bench_lamport,
       bench_bqueue,
       bench_mp,
-      bench_unbounded
+      bench_unbounded,
+      bench_dspsc
 }
 criterion_main!(benches);
