@@ -217,10 +217,10 @@ criterion_group!{
    name = benches;
    config = custom_criterion();
    targets =
-      bench_lamport,
-      bench_bqueue,
+      //bench_lamport,
+      //bench_bqueue,
       bench_mp,
-      bench_unbounded,
-      bench_dspsc
+      //bench_unbounded,
+      //bench_dspsc
 }
 criterion_main!(benches);

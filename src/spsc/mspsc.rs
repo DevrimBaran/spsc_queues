@@ -7,10 +7,11 @@ use std::{
     fmt,
     mem::MaybeUninit,
     ptr,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence},
 };
 
 // Pre-allocated local buffer for batch operations
+// Size from the paper (Fig. 4)
 const LOCAL_BUF: usize = 16;
 
 pub struct MultiPushQueue<T: Send + 'static> {
@@ -40,8 +41,7 @@ impl<T: Send + 'static> MultiPushQueue<T> {
         }
     }
 
-    /// Safety: `mem` must be at least `shared_size(cap)` bytes,
-    /// writable and `MAP_SHARED`.
+    // Safety: `mem` must be at least `shared_size(cap)` bytes,writable and `MAP_SHARED`.
     pub unsafe fn init_in_shared(mem: *mut u8, cap: usize) -> &'static mut Self {
         let header = mem as *mut MaybeUninit<Self>;
         let ring_ptr = mem.add(std::mem::size_of::<Self>());
@@ -76,58 +76,55 @@ impl<T: Send + 'static> MultiPushQueue<T> {
         unsafe { &mut *self.inner }
     }
 
-    // flush operation: flushes as many items as possible
+    // Implementation of the multipush method as described in the paper
     #[inline]
-    fn flush_local(&self) -> bool {
+    fn multipush(&self) -> bool {
         let buf = unsafe { &mut *self.local_buf.get() };
         let count = self.local_count.load(Ordering::Relaxed);
         
         if count == 0 {
             return true;
         }
+
+        // Check if there's enough space in the underlying queue
+        if !self.ring().available() {
+            return false;
+        }
         
-        let mut new_count = count;
-        let mut flushed = false;
+        // Write items in backward order to enforce distance
+        // between producer and consumer pointers
+        let mut success = true;
         
-        // Try to flush items, but don't loop indefinitely
+        // insert in reverse order like in paper
         for i in (0..count).rev() {
-            if !self.ring().available() {
-                break;
-            }
-            
-            // Get the item pointer without moving it yet
+            // Get the item pointer
             let item_ptr = buf[i].as_mut_ptr();
             
-            // Create a copy of the item
-            let success = unsafe {
+            // Move the item to the ring
+            let push_result = unsafe {
                 let item = ptr::read(item_ptr);
-                self.ring_mut().push(item).is_ok()
+                self.ring_mut().push(item)
             };
             
-            if success {
-                // Success - mark as flushed
-                new_count = i;
-                flushed = true;
-            } else {
-                // Push failed - we do not need to restore the item
-                // because we used ptr::read which makes a copy
+            if push_result.is_err() {
+                success = false;
                 break;
             }
         }
         
-        // Update the count if we flushed anything
-        if flushed {
-            self.local_count.store(new_count, Ordering::Relaxed);
+        // If we successfully pushed all items, reset the counter
+        if success {
+            self.local_count.store(0, Ordering::Relaxed);
         }
         
-        flushed
+        success
     }
 }
 
 impl<T: Send + 'static> Drop for MultiPushQueue<T> {
     fn drop(&mut self) {
-        // Try to flush remaining items but don't block
-        self.flush_local();
+        // Try to flush remaining items
+        self.multipush();
         
         // Free the heap-backed variant only
         if !self.shared.load(Ordering::Relaxed) {
@@ -153,68 +150,34 @@ impl<T: Send + 'static> SpscQueue<T> for MultiPushQueue<T> {
     fn push(&self, item: T) -> Result<(), Self::PushError> {
         let count = self.local_count.load(Ordering::Relaxed);
         
-        // If buffer is full, try to flush
-        if count == LOCAL_BUF {
-            self.flush_local();
-            
-            // Check again after flushing
-            let new_count = self.local_count.load(Ordering::Relaxed);
-            
-            // If still full after flushing, try direct push to ring
-            if new_count == LOCAL_BUF {
-                // Direct push to the ring (consumes item)
+        // If buffer is full, flush it
+        if count >= LOCAL_BUF {
+            // Try to flush the buffer
+            if !self.multipush() {
+                // If flush failed, try direct push
                 return self.ring_mut().push(item);
             }
-            
-            // Use the new count after flushing
-            let idx = new_count;
-            
-            // Try to increment the count atomically
-            if self.local_count.compare_exchange(
-                new_count, 
-                new_count + 1, 
-                Ordering::AcqRel, 
-                Ordering::Relaxed
-            ).is_ok() {
-                // Successfully claimed a slot
-                unsafe {
-                    let buf = &mut *self.local_buf.get();
-                    ptr::write(buf[idx].as_mut_ptr(), item);
-                }
-                
-                return Ok(());
-            } else {
-                // Someone else took our slot (shouldn't happen in SPSC),
-                // try direct push
-                return self.ring_mut().push(item);
-            }
+            // Reset count since multipush succeeded
+            // (done inside multipush method)
         }
         
-        // Buffer is not full, try to add the item
-        // Use the compare_exchange to ensure we get the right slot
-        let idx = count;
-        
-        if self.local_count.compare_exchange(
-            count, 
-            count + 1, 
-            Ordering::AcqRel, 
-            Ordering::Relaxed
-        ).is_ok() {
-            // Successfully claimed a slot
+        // Add to local buffer - simpler approach for SPSC
+        let idx = self.local_count.fetch_add(1, Ordering::Relaxed);
+        if idx < LOCAL_BUF {
             unsafe {
                 let buf = &mut *self.local_buf.get();
                 ptr::write(buf[idx].as_mut_ptr(), item);
             }
             
-            // If buffer is full now, try to flush
+            // If buffer is now full, try to flush it
             if idx + 1 == LOCAL_BUF {
-                self.flush_local();
+                self.multipush();
             }
             
             Ok(())
         } else {
-            // Slot was taken by another thread (shouldn't happen in SPSC),
-            // try direct push (consumes item)
+            // Buffer was already full
+            // direct push
             self.ring_mut().push(item)
         }
     }

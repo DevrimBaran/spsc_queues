@@ -21,7 +21,6 @@ unsafe impl<T: Send> Sync for LamportQueue<T> {}
 unsafe impl<T: Send> Send for LamportQueue<T> {}
 
 // heap-backed constructor
-
 impl<T: Send> LamportQueue<T> {
    // Build a queue that lives on the Rust heap.
    pub fn with_capacity(cap: usize) -> Self {
@@ -47,7 +46,6 @@ impl<T: Send> LamportQueue<T> {
 }
 
 // shared-memory in-place constructor
-
 impl<T: Send> LamportQueue<T> {
    /// Bytes required for header + `cap` elements.
    pub const fn shared_size(cap: usize) -> usize {
@@ -55,8 +53,7 @@ impl<T: Send> LamportQueue<T> {
       + cap * std::mem::size_of::<UnsafeCell<Option<T>>>()
    }
 
-   // Safety
-   // `mem` must point to a writable, process-shared mapping of at least
+   // Safety: `mem` must point to a writable, process-shared mapping of at least
    // `shared_size(cap)` bytes which lives for `'static`.
    pub unsafe fn init_in_shared(mem: *mut u8, cap: usize) -> &'static mut Self {
       assert!(cap.is_power_of_two());
@@ -80,7 +77,6 @@ impl<T: Send> LamportQueue<T> {
 }
 
 // queue operations
-
 impl<T: Send + 'static> SpscQueue<T> for LamportQueue<T> {
    type PushError = ();
    type PopError  = ();
@@ -147,7 +143,7 @@ impl<T: Send + 'static> SpscQueue<T> for LamportQueue<T> {
 
    #[inline]
    fn available(&self) -> bool {
-      // CHANGES: Use consistent memory ordering
+      // changes: Use consistent memory ordering
       let tail = self.tail.load(Ordering::Acquire);
       let head = self.head.load(Ordering::Acquire);
       tail.wrapping_sub(head) < self.mask
@@ -155,7 +151,7 @@ impl<T: Send + 'static> SpscQueue<T> for LamportQueue<T> {
 
    #[inline]
    fn empty(&self) -> bool {
-      // CHANGES: Use consistent memory ordering for both loads
+      // changes: Use consistent memory ordering for both loads
       let head = self.head.load(Ordering::Acquire);
       let tail = self.tail.load(Ordering::Acquire);
       head == tail

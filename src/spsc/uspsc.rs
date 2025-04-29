@@ -10,7 +10,6 @@ use std::{
 };
 
 // constants
-
 const BUF_CAP:  usize = 1024; // elements in one Lamport ring (must be 2^n)
 const POOL_CAP: usize = 32; // spare rings cached inline
 
@@ -34,7 +33,6 @@ struct RingSlot<T: Send + 'static> {
 }
 
 // queue header
-
 pub struct UnboundedQueue<T: Send + 'static> {
     // active rings
     write: UnsafeCell<*mut LamportQueue<T>>, // current producer ring
@@ -142,7 +140,6 @@ impl<T: Send + 'static> UnboundedQueue<T> {
 }
 
 // SpscQueue implementation
-
 impl<T: Send + 'static> SpscQueue<T> for UnboundedQueue<T> {
     type PushError = ();
     type PopError  = ();
@@ -259,119 +256,111 @@ impl<T: Send + 'static> SpscQueue<T> for UnboundedQueue<T> {
     }
 }
 
-/* --------------------------------------------------------------------- */
-/* shared-memory construction                                            */
-/* --------------------------------------------------------------------- */
-
-
+// shared-memory construction
 impl<T: Send + 'static> UnboundedQueue<T> {
-   pub const fn shared_size() -> usize {
-       let hdr = size_of::<Self>();
-       let a   = align_of::<LamportQueue<T>>();
-       let pad = (a - (hdr % a)) % a;
-       // Additional space for preallocated rings
-       hdr + pad + (2 + POOL_CAP + PREALLOCATED_RINGS) * LamportQueue::<T>::shared_size(BUF_CAP)
-   }
+    pub const fn shared_size() -> usize {
+        let hdr = size_of::<Self>();
+        let a   = align_of::<LamportQueue<T>>();
+        let pad = (a - (hdr % a)) % a;
+        // Additional space for preallocated rings
+        hdr + pad + (2 + POOL_CAP + PREALLOCATED_RINGS) * LamportQueue::<T>::shared_size(BUF_CAP)
+    }
 
-   /// # Safety
-   /// mem must be a writable, process-shared mapping of shared_size() bytes.
-   pub unsafe fn init_in_shared(mem: *mut u8) -> &'static mut Self {
-      // Calculate memory layout
-      let hdr = size_of::<Self>();
-      let a = align_of::<LamportQueue<T>>();
-      let pad = (a - (hdr % a)) % a;
-      let ring_sz = LamportQueue::<T>::shared_size(BUF_CAP);
-  
-      // Initialize the queue structure with null pointers
-      let this = mem.cast::<MaybeUninit<Self>>();
-      
-      // Create array of null pointers for preallocated rings
-      let preallocated = [
-          UnsafeCell::new(ptr::null_mut()),
-          UnsafeCell::new(ptr::null_mut()),
-          UnsafeCell::new(ptr::null_mut()),
-          UnsafeCell::new(ptr::null_mut()),
-      ];
-      
-      ptr::write(
-          this,
-          MaybeUninit::new(Self {
-              write: UnsafeCell::new(ptr::null_mut()),
-              read: UnsafeCell::new(ptr::null_mut()),
-              fixed_fd: [AtomicU32::new(u32::MAX), AtomicU32::new(u32::MAX)],
-              fixed_pid: [AtomicU32::new(0), AtomicU32::new(0)],
-              fixed_len: AtomicUsize::new(0),
-              pool: UnsafeCell::new(
-                  MaybeUninit::<[MaybeUninit<RingSlot<T>>; POOL_CAP]>::uninit().assume_init(),
-              ),
-              head: AtomicUsize::new(0),
-              tail: AtomicUsize::new(0),
-              preallocated_rings: preallocated,
-              next_free_ring: AtomicUsize::new(0),
-              initialized: AtomicBool::new(false),
-          }),
-      );
-  
-      let me: &mut Self = &mut *(*this).as_mut_ptr();
-  
-      // Calculate the start address for buffers (after queue structure)
-      let mut cur = mem.add(hdr + pad);
-      
-      // Initialize primary buffer
-      let initial_ring = LamportQueue::init_in_shared(cur, BUF_CAP);
-      *me.write.get() = initial_ring;
-      *me.read.get() = initial_ring;  // Both point to the same buffer initially
-      cur = cur.add(ring_sz);
-      
-      // Skip the second buffer position but still advance the pointer
-      cur = cur.add(ring_sz);
-  
-      // Store metadata about the ring size and our PID
-      me.fixed_len.store(ring_sz, Ordering::Release);
-      let pid = libc::getpid() as u32;
-      me.fixed_pid[0].store(pid, Ordering::Release);
-      me.fixed_pid[1].store(pid, Ordering::Release);
-  
-      // Initialize the pool of additional buffers
-      let pool = &mut *me.pool.get();
-      for slot in pool.iter_mut() {
-          let ring = LamportQueue::init_in_shared(cur, BUF_CAP);
-          cur = cur.add(ring_sz);
-          
-          // Set up each slot with proper initial values
-          slot.write(RingSlot {
-              prod_ptr: UnsafeCell::new(ring),
-              cons_ptr: UnsafeCell::new(ring),
-              fd: AtomicU32::new(u32::MAX),
-              pid: AtomicU32::new(pid),
-              len: AtomicUsize::new(ring_sz),
-              flag: AtomicU32::new(BOTH_READY),
-              initialized: AtomicBool::new(true),
-          });
-      }
+    // Safety: mem must be a writable, process-shared mapping of shared_size() bytes.
+    pub unsafe fn init_in_shared(mem: *mut u8) -> &'static mut Self {
+        // Calculate memory layout
+        let hdr = size_of::<Self>();
+        let a = align_of::<LamportQueue<T>>();
+        let pad = (a - (hdr % a)) % a;
+        let ring_sz = LamportQueue::<T>::shared_size(BUF_CAP);
+    
+        // Initialize the queue structure with null pointers
+        let this = mem.cast::<MaybeUninit<Self>>();
+        
+        // Create array of null pointers for preallocated rings
+        let preallocated = [
+            UnsafeCell::new(ptr::null_mut()),
+            UnsafeCell::new(ptr::null_mut()),
+            UnsafeCell::new(ptr::null_mut()),
+            UnsafeCell::new(ptr::null_mut()),
+        ];
+        
+        ptr::write(
+            this,
+            MaybeUninit::new(Self {
+                write: UnsafeCell::new(ptr::null_mut()),
+                read: UnsafeCell::new(ptr::null_mut()),
+                fixed_fd: [AtomicU32::new(u32::MAX), AtomicU32::new(u32::MAX)],
+                fixed_pid: [AtomicU32::new(0), AtomicU32::new(0)],
+                fixed_len: AtomicUsize::new(0),
+                pool: UnsafeCell::new(
+                    MaybeUninit::<[MaybeUninit<RingSlot<T>>; POOL_CAP]>::uninit().assume_init(),
+                ),
+                head: AtomicUsize::new(0),
+                tail: AtomicUsize::new(0),
+                preallocated_rings: preallocated,
+                next_free_ring: AtomicUsize::new(0),
+                initialized: AtomicBool::new(false),
+            }),
+        );
+    
+        let me: &mut Self = &mut *(*this).as_mut_ptr();
+    
+        // Calculate the start address for buffers (after queue structure)
+        let mut cur = mem.add(hdr + pad);
+        
+        // Initialize primary buffer
+        let initial_ring = LamportQueue::init_in_shared(cur, BUF_CAP);
+        *me.write.get() = initial_ring;
+        *me.read.get() = initial_ring;  // Both point to the same buffer initially
+        cur = cur.add(ring_sz);
+        
+        // Skip the second buffer position but still advance the pointer
+        cur = cur.add(ring_sz);
+    
+        // Store metadata about the ring size and our PID
+        me.fixed_len.store(ring_sz, Ordering::Release);
+        let pid = libc::getpid() as u32;
+        me.fixed_pid[0].store(pid, Ordering::Release);
+        me.fixed_pid[1].store(pid, Ordering::Release);
+    
+        // Initialize the pool of additional buffers
+        let pool = &mut *me.pool.get();
+        for slot in pool.iter_mut() {
+            let ring = LamportQueue::init_in_shared(cur, BUF_CAP);
+            cur = cur.add(ring_sz);
+            
+            // Set up each slot with proper initial values
+            slot.write(RingSlot {
+                prod_ptr: UnsafeCell::new(ring),
+                cons_ptr: UnsafeCell::new(ring),
+                fd: AtomicU32::new(u32::MAX),
+                pid: AtomicU32::new(pid),
+                len: AtomicUsize::new(ring_sz),
+                flag: AtomicU32::new(BOTH_READY),
+                initialized: AtomicBool::new(true),
+            });
+        }
 
-      me.tail.store(POOL_CAP, Ordering::Release);
-      
-      // Initialize preallocated rings
-      for i in 0..PREALLOCATED_RINGS {
-          let ring = LamportQueue::init_in_shared(cur, BUF_CAP);
-          cur = cur.add(ring_sz);
-          *me.preallocated_rings[i].get() = ring;
-      }
-      
-      // Mark as initialized
-      me.initialized.store(true, Ordering::Release);
-  
-      me
-  }
+        me.tail.store(POOL_CAP, Ordering::Release);
+        
+        // Initialize preallocated rings
+        for i in 0..PREALLOCATED_RINGS {
+            let ring = LamportQueue::init_in_shared(cur, BUF_CAP);
+            cur = cur.add(ring_sz);
+            *me.preallocated_rings[i].get() = ring;
+        }
+        
+        // Mark as initialized
+        me.initialized.store(true, Ordering::Release);
+    
+        me
+    }
 }
 
-/* --------------------------------------------------------------------- */
-/* pool helpers – producer (non-blocking)                                */
-/* --------------------------------------------------------------------- */
-
+// pool helpers – producer (non-blocking)
 impl<T: Send + 'static> UnboundedQueue<T> {
-   /// Attempts to get a buffer from the pool without blocking
+   // Attempts to get a buffer from the pool without blocking
     fn pool_pop_prod_nonblocking(&self) -> Option<(*mut LamportQueue<T>, u32, usize, bool)> {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Acquire);

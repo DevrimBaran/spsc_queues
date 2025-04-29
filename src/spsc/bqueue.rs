@@ -6,19 +6,17 @@ use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
 
-/// Wait-free single-producer/single-consumer batched queue
-/// (B-Queue from Wang et al., Int J Parallel Prog 2013).
-/// Uses batch probing and backtracking for full capacity.
+// B-Queue from Wang
 #[repr(C)]
 pub struct BQueue<T: Send + 'static> {
     buf: *mut MaybeUninit<Option<T>>,
     cap: usize,
     mask: usize,
-    head: Cell<usize>,       // next slot to write (producer)
+    head: Cell<usize>, // next slot to write (producer)
     batch_head: Cell<usize>, // probe boundary (producer)
-    tail: Cell<usize>,       // next slot to read (consumer)
+    tail: Cell<usize>, // next slot to read (consumer)
     batch_tail: Cell<usize>, // probe boundary (consumer)
-    history: Cell<usize>,    // adaptive backtracking start size
+    history: Cell<usize>, // adaptive backtracking start size
 }
 
 // Fixed batch size constant, available throughout the module
@@ -28,7 +26,7 @@ unsafe impl<T: Send + 'static> Sync for BQueue<T> {}
 unsafe impl<T: Send + 'static> Send for BQueue<T> {}
 
 impl<T: Send + 'static> BQueue<T> {
-    /// Create an in-process queue with `capacity` = power-of-two.
+    // Create an in-process queue with `capacity` = power-of-two.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity.is_power_of_two(), "capacity must be power of two");
         let mut v: Vec<MaybeUninit<Option<T>>> = Vec::with_capacity(capacity);
@@ -50,16 +48,13 @@ impl<T: Send + 'static> BQueue<T> {
         }
     }
 
-    /// Bytes needed for header + buffer slots.
+    // Bytes needed for header + buffer slots.
     pub const fn shared_size(capacity: usize) -> usize {
         mem::size_of::<Self>() + capacity * mem::size_of::<MaybeUninit<Option<T>>>()
     }
 
-    /// Initialize a shared-memory queue in-place.
-    ///
-    /// # Safety
-    ///
-    /// `mem` must point to at least `shared_size(capacity)` bytes of MAP_SHARED.
+    // Initialize a shared-memory queue in-place.
+    // Safety: mem` must point to at least `shared_size(capacity)` bytes of MAP_SHARED.
     pub unsafe fn init_in_shared(mem: *mut u8, capacity: usize) -> &'static mut Self {
         assert!(capacity.is_power_of_two(), "capacity must be power of two");
         let header = mem as *mut Self;
@@ -71,7 +66,7 @@ impl<T: Send + 'static> BQueue<T> {
         &mut *header
     }
 
-    /// Internal constructor for in-place init.
+    // Internal constructor for in-place init.
     fn new_inplace(buf: *mut MaybeUninit<Option<T>>, capacity: usize) -> Self {
         let edge = capacity - 1;
         BQueue {
@@ -91,7 +86,7 @@ impl<T: Send + 'static> BQueue<T> {
         (idx + 1) & self.mask
     }
 
-    /// Enqueue an item. Returns Err(item) if queue is full.
+    // Enqueue an item. Returns Err(item) if queue is full.
     pub fn push(&self, item: T) -> Result<(), T> {
         let h = self.head.get();
         if h == self.batch_head.get() {
@@ -111,7 +106,7 @@ impl<T: Send + 'static> BQueue<T> {
         Ok(())
     }
 
-    /// Dequeue an item. Returns Err(()) if queue is empty.
+    // Dequeue an item. Returns Err(()) if queue is empty.
     pub fn pop(&self) -> Result<T, ()> {
         let t = self.tail.get();
         if t != self.batch_tail.get() {
@@ -157,7 +152,7 @@ impl<T: Send + 'static> BQueue<T> {
         Err(())
     }
 
-    /// True when a subsequent push may succeed.
+    // True when a subsequent push may succeed.
     pub fn available(&self) -> bool {
         let h = self.head.get();
         let bh = self.batch_head.get();
@@ -165,7 +160,7 @@ impl<T: Send + 'static> BQueue<T> {
         unsafe { (*self.buf.add(bh)).assume_init_ref().is_none() }
     }
 
-    /// True when a subsequent pop will fail.
+    // True when a subsequent pop will fail.
     pub fn empty(&self) -> bool {
         let t = self.tail.get();
         let bt = self.batch_tail.get();
