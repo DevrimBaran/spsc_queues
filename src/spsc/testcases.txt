@@ -1,0 +1,27 @@
+assertions in code um bedingungen zu überprüfen die gelten müssenn
+rust miri checker https://github.com/rust-lang/miri
+invarianten (bedingungen die gelten müssen)
+unit tests (nicht für concurrency)
+loom https://github.com/tokio-rs/loom
+violine plot (plotart)
+matplotlib
+
+
+Marc Fischerisw.uni-stuttgart.de11:03
+https://github.com/rust-lang/miri
+
+Marc Fischerisw.uni-stuttgart.de11:05
+https://github.com/tokio-rs/loom
+
+Marc Fischerisw.uni-stuttgart.de11:16
+https://onlinelibrary.wiley.com/doi/full/10.1002/spe.2675
+Sie11:20 methode anwenden und performance testen
+https://dl.acm.org/doi/pdf/10.1145/1345206.1345215
+
+Marc Fischerisw.uni-stuttgart.de11:35
+https://matplotlib.org/
+
+https://matplotlib.org/stable/plot_types/stats/violin.html#sphx-glr-plot-types-stats-violin-py
+
+fast forward
+überprüfen ob lock-free paper wait-free sind

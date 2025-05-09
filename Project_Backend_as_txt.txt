@@ -1,0 +1,5 @@
+LD_LIBRARY_PATH="$(rustc +nightly --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" RUST_BACKTRACE=full RUSTFLAGS="-Z sanitizer=address" ASAN_SYMBOLIZER_PATH="$ASAN_SYMBOLIZER_PATH" ASAN_OPTIONS="$ASAN_OPTIONS" cargo +nightly -Zbuild-std       bench --target x86_64-unknown-linux-gnu       --features bench --bench process_bench       2>&1 | tee asan.log
+
+cargo bench --features bench --bench process_bench
+
+cargo test

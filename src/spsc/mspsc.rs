@@ -7,7 +7,7 @@ use std::{
     fmt,
     mem::MaybeUninit,
     ptr,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 // Pre-allocated local buffer for batch operations

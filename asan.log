@@ -1,77 +1,80 @@
    Compiling spsc_queues v0.1.0 (/home/baran/Dokumente/Uni/MA/spsc_queues)
 warning: variable does not need to be mutable
-  --> src/spsc/bqueue.rs:97:17
+  --> src/spsc/bqueue.rs:93:17
    |
-97 |             let mut probe = self.cap;
-   |                 ----^^^^^
+93 |             let mut bh = (h + BATCH_SIZE - 1) & self.mask;
+   |                 ----^^
    |                 |
    |                 help: remove this `mut`
    |
    = note: `#[warn(unused_mut)]` on by default
 
-warning: field `nodes_storage` is never read
-  --> src/spsc/dspsc.rs:18:5
+warning: unnecessary `unsafe` block
+   --> src/spsc/bqueue.rs:184:27
+    |
+184 |         while let Ok(_) = unsafe { &*self }.pop() {}
+    |                           ^^^^^^ unnecessary `unsafe` block
+    |
+    = note: `#[warn(unused_unsafe)]` on by default
+
+warning: constant `CHILD_READY` is never used
+  --> src/spsc/uspsc.rs:19:7
    |
-14 | pub struct DynListQueue<T: Send + 'static> {
-   |            ------------ field in this struct
-...
-18 |     nodes_storage: Box<[u8]>,      // Raw memory for nodes
-   |     ^^^^^^^^^^^^^
+19 | const CHILD_READY: u32 = 1; // producer mapped – waiting for consumer
+   |       ^^^^^^^^^^^
    |
    = note: `#[warn(dead_code)]` on by default
 
-warning: constant `CHILD_READY` is never used
-  --> src/spsc/uspsc.rs:20:7
-   |
-20 | const CHILD_READY: u32 = 1; // producer mapped – waiting for consumer
-   |       ^^^^^^^^^^^
-
 warning: field `fixed_fd` is never read
-  --> src/spsc/uspsc.rs:44:5
+  --> src/spsc/uspsc.rs:42:5
    |
-38 | pub struct UnboundedQueue<T: Send + 'static> {
+36 | pub struct UnboundedQueue<T: Send + 'static> {
    |            -------------- field in this struct
 ...
-44 |     fixed_fd:  [AtomicU32; 2],
+42 |     fixed_fd:  [AtomicU32; 2],
    |     ^^^^^^^^
 
 warning: `spsc_queues` (lib) generated 4 warnings (run `cargo fix --lib -p spsc_queues` to apply 1 suggestion)
-warning: unused imports: `AtomicU32` and `Ordering`
-  --> benches/process_bench.rs:15:25
+warning: constant `RING_CAP` is never used
+  --> benches/process_bench.rs:20:7
    |
-15 | use std::sync::atomic::{Ordering, AtomicU32};
-   |                         ^^^^^^^^  ^^^^^^^^^
-   |
-   = note: `#[warn(unused_imports)]` on by default
-
-warning: function `bench_lamport` is never used
-  --> benches/process_bench.rs:45:4
-   |
-45 | fn bench_lamport(c: &mut Criterion) {
-   |    ^^^^^^^^^^^^^
+20 | const RING_CAP: usize = 1024;
+   |       ^^^^^^^^
    |
    = note: `#[warn(dead_code)]` on by default
 
-warning: function `bench_mp` is never used
-  --> benches/process_bench.rs:74:4
-   |
-74 | fn bench_mp(c: &mut Criterion) {
-   |    ^^^^^^^^
-
-warning: function `bench_dspsc` is never used
-   --> benches/process_bench.rs:101:4
+warning: function `bench_dehnavi` is never used
+   --> benches/process_bench.rs:114:4
     |
-101 | fn bench_dspsc(c: &mut Criterion) {
-    |    ^^^^^^^^^^^
+114 | fn bench_dehnavi(c: &mut Criterion) {
+    |    ^^^^^^^^^^^^^
+
+warning: function `bench_lamport` is never used
+   --> benches/process_bench.rs:137:4
+    |
+137 | fn bench_lamport(c: &mut Criterion) {
+    |    ^^^^^^^^^^^^^
+
+warning: function `bench_bqueue` is never used
+   --> benches/process_bench.rs:151:4
+    |
+151 | fn bench_bqueue(c: &mut Criterion) {
+    |    ^^^^^^^^^^^^
+
+warning: function `bench_mp` is never used
+   --> benches/process_bench.rs:165:4
+    |
+165 | fn bench_mp(c: &mut Criterion) {
+    |    ^^^^^^^^
 
 warning: function `bench_unbounded` is never used
-   --> benches/process_bench.rs:112:4
+   --> benches/process_bench.rs:205:4
     |
-112 | fn bench_unbounded(c: &mut Criterion) {
+205 | fn bench_unbounded(c: &mut Criterion) {
     |    ^^^^^^^^^^^^^^^
 
-warning: `spsc_queues` (bench "process_bench") generated 5 warnings (run `cargo fix --bench "process_bench"` to apply 1 suggestion)
-    Finished `bench` profile [optimized + debuginfo] target(s) in 2.38s
-     Running benches/process_bench.rs (target/x86_64-unknown-linux-gnu/release/deps/process_bench-5ecc738d14de4666)
-Benchmarking B-Queue (process)
-Benchmarking B-Queue (process): Warming up for 5.0000 s
+warning: `spsc_queues` (bench "process_bench") generated 6 warnings
+    Finished `bench` profile [optimized + debuginfo] target(s) in 1.31s
+     Running benches/process_bench.rs (target/x86_64-unknown-linux-gnu/release/deps/process_bench-210bfafab1bf6a3c)
+Benchmarking dSPSC (process - shared)
+Benchmarking dSPSC (process - shared): Warming up for 5.0000 s

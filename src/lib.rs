@@ -5,6 +5,8 @@ pub use spsc::DynListQueue;
 pub use spsc::UnboundedQueue;
 pub use spsc::MultiPushQueue;
 pub use spsc::BQueue;
+pub use spsc::DehnaviQueue;
+pub use spsc::PopError;
 
 /// Common interface for all queues.
 pub trait SpscQueue<T: Send>: Send + 'static {
