@@ -4,8 +4,10 @@ use std::ptr::{self, null_mut};
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::mem;
 
-// Exactly like the paper tates is around 6 times slower then uspsc if producer and consumer on different core.
-const PREALLOCATED_NODES: usize = 1_000_000; // Adjusted to match typical ITERS
+// Exactly like the paper tates is around 6 times slower then uspsc if producer and consumer on different core. Cache locality is the problem (creating new nodes makes it harder to find then havin array based ringbuffers)
+// Other problem is since producer (as stated in the paper) is faster then the consumer if i put 10% lesser pre allocated nodes the node cache gets exhausted and it seems like a deadlock happens.
+// But to still test the code i will keep a number so that no deadlock happens but still the recycling is used too.
+const PREALLOCATED_NODES: usize = 900_000; // Adjusted to match typical ITERS
 
 struct NodeShared<T: Send + 'static> {
     val: Option<T>,
