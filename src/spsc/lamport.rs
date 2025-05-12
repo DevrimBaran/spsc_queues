@@ -76,6 +76,32 @@ impl<T: Send> LamportQueue<T> {
    }
 }
 
+// helper for mspsc:
+impl<T: Send> LamportQueue<T> {
+   /// Ring capacity (power‑of‑two)
+   #[inline] pub fn capacity(&self) -> usize { self.mask + 1 }
+
+   /// **Producer** cursor (called `head` in Torquati’s multipush code).
+   #[inline] pub fn head_relaxed(&self) -> usize {           // producer‑only
+       self.tail.load(Ordering::Relaxed)
+   }
+
+   /// **Consumer** cursor (`tail` in Torquati’s notation).
+   #[inline] pub fn tail_relaxed(&self) -> usize {           // consumer‑only
+       self.head.load(Ordering::Relaxed)
+   }
+
+   /// Write without checking space.  Caller guarantees at least one free slot.
+   /// Used only by the producer side of MultiPushQueue.
+   #[inline]
+   pub unsafe fn push_unchecked(&mut self, item: T) {
+       let tail = self.tail.load(Ordering::Relaxed);
+       let slot = self.idx(tail);
+       (*self.buf[slot].get()) = Some(item);
+       self.tail.store(tail.wrapping_add(1), Ordering::Relaxed);
+   }
+}
+
 // queue operations
 impl<T: Send + 'static> SpscQueue<T> for LamportQueue<T> {
    type PushError = ();

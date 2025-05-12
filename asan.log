@@ -1,80 +1,30 @@
-   Compiling spsc_queues v0.1.0 (/home/baran/Dokumente/Uni/MA/spsc_queues)
-warning: variable does not need to be mutable
-  --> src/spsc/bqueue.rs:93:17
-   |
-93 |             let mut bh = (h + BATCH_SIZE - 1) & self.mask;
-   |                 ----^^
-   |                 |
-   |                 help: remove this `mut`
-   |
-   = note: `#[warn(unused_mut)]` on by default
-
-warning: unnecessary `unsafe` block
-   --> src/spsc/bqueue.rs:184:27
-    |
-184 |         while let Ok(_) = unsafe { &*self }.pop() {}
-    |                           ^^^^^^ unnecessary `unsafe` block
-    |
-    = note: `#[warn(unused_unsafe)]` on by default
-
-warning: constant `CHILD_READY` is never used
-  --> src/spsc/uspsc.rs:19:7
-   |
-19 | const CHILD_READY: u32 = 1; // producer mapped – waiting for consumer
-   |       ^^^^^^^^^^^
-   |
-   = note: `#[warn(dead_code)]` on by default
-
-warning: field `fixed_fd` is never read
-  --> src/spsc/uspsc.rs:42:5
-   |
-36 | pub struct UnboundedQueue<T: Send + 'static> {
-   |            -------------- field in this struct
-...
-42 |     fixed_fd:  [AtomicU32; 2],
-   |     ^^^^^^^^
-
-warning: `spsc_queues` (lib) generated 4 warnings (run `cargo fix --lib -p spsc_queues` to apply 1 suggestion)
-warning: constant `RING_CAP` is never used
-  --> benches/process_bench.rs:20:7
-   |
-20 | const RING_CAP: usize = 1024;
-   |       ^^^^^^^^
-   |
-   = note: `#[warn(dead_code)]` on by default
-
-warning: function `bench_dehnavi` is never used
-   --> benches/process_bench.rs:114:4
-    |
-114 | fn bench_dehnavi(c: &mut Criterion) {
-    |    ^^^^^^^^^^^^^
-
-warning: function `bench_lamport` is never used
-   --> benches/process_bench.rs:137:4
-    |
-137 | fn bench_lamport(c: &mut Criterion) {
-    |    ^^^^^^^^^^^^^
-
-warning: function `bench_bqueue` is never used
-   --> benches/process_bench.rs:151:4
-    |
-151 | fn bench_bqueue(c: &mut Criterion) {
-    |    ^^^^^^^^^^^^
-
-warning: function `bench_mp` is never used
-   --> benches/process_bench.rs:165:4
-    |
-165 | fn bench_mp(c: &mut Criterion) {
-    |    ^^^^^^^^
-
-warning: function `bench_unbounded` is never used
-   --> benches/process_bench.rs:205:4
-    |
-205 | fn bench_unbounded(c: &mut Criterion) {
-    |    ^^^^^^^^^^^^^^^
-
-warning: `spsc_queues` (bench "process_bench") generated 6 warnings
-    Finished `bench` profile [optimized + debuginfo] target(s) in 1.31s
-     Running benches/process_bench.rs (target/x86_64-unknown-linux-gnu/release/deps/process_bench-210bfafab1bf6a3c)
-Benchmarking dSPSC (process - shared)
-Benchmarking dSPSC (process - shared): Warming up for 5.0000 s
+   Compiling std v0.0.0 (/home/baran/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std)
+   Compiling rustc-std-workspace-std v1.99.0 (/home/baran/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/rustc-std-workspace-std)
+   Compiling rustc-literal-escaper v0.0.2
+   Compiling proc_macro v0.0.0 (/home/baran/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/proc_macro)
+   Compiling crossbeam-utils v0.8.21
+   Compiling cfg-if v1.0.0
+   Compiling serde v1.0.219
+   Compiling either v1.15.0
+   Compiling libc v0.2.172
+   Compiling regex-syntax v0.8.5
+   Compiling itoa v1.0.15
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.4
+   Compiling clap_lex v0.7.4
+   Compiling ciborium-io v0.2.2
+   Compiling half v2.6.0
+   Compiling anstyle v1.0.10
+   Compiling plotters-backend v0.3.7
+   Compiling num-traits v0.2.19
+   Compiling same-file v1.0.6
+   Compiling cast v0.3.0
+   Compiling itertools v0.10.5
+   Compiling walkdir v2.5.0
+   Compiling clap_builder v4.5.37
+   Compiling ciborium-ll v0.2.2
+   Compiling anes v0.1.6
+   Compiling bitflags v2.9.0
+   Compiling oorandom v11.1.5
+   Compiling plotters-svg v0.3.7
+   Compiling once_cell v1.21.3

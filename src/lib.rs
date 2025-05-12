@@ -7,6 +7,9 @@ pub use spsc::MultiPushQueue;
 pub use spsc::BQueue;
 pub use spsc::DehnaviQueue;
 pub use spsc::PopError;
+pub use spsc::IffqQueue;
+pub use spsc::BiffqQueue;
+pub use spsc::FfqQueue;
 
 /// Common interface for all queues.
 pub trait SpscQueue<T: Send>: Send + 'static {

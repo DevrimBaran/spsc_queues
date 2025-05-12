@@ -12,11 +12,11 @@ pub struct BQueue<T: Send + 'static> {
     buf: *mut MaybeUninit<Option<T>>,
     cap: usize,
     mask: usize,
-    head: Cell<usize>, // next slot to write (producer)
-    batch_head: Cell<usize>, // probe boundary (producer)
-    tail: Cell<usize>, // next slot to read (consumer)
-    batch_tail: Cell<usize>, // probe boundary (consumer)
-    history: Cell<usize>, // adaptive backtracking start size
+    head: Cell<usize>,
+    batch_head: Cell<usize>,
+    tail: Cell<usize>,
+    batch_tail: Cell<usize>,
+    history: Cell<usize>,
 }
 
 // Fixed batch size constant, available throughout the module

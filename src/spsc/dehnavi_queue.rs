@@ -1,14 +1,12 @@
-// spsc_queues/src/spsc/dehnavi_queue.rs
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::ptr;
-use crate::SpscQueue; // Assuming SpscQueue is at crate root or spsc_queues::SpscQueue
+use crate::SpscQueue;
 
 #[derive(Debug)]
 pub struct DehnaviQueue<T: Send + 'static> { 
    pub(crate) buffer: Box<[UnsafeCell<MaybeUninit<T>>]>,
-   // Made public for tests to directly access, consider getters for production
    pub capacity: usize, 
    pub wc: AtomicUsize, 
    pub rc: AtomicUsize, 

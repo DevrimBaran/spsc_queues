@@ -4,6 +4,9 @@ pub mod dspsc;
 pub mod uspsc;
 pub mod bqueue;
 pub mod dehnavi_queue;
+pub mod biffq;
+pub mod iffq;
+pub mod ffq;
 // mod cruiser;
 
 pub use lamport::LamportQueue;
@@ -13,3 +16,6 @@ pub use uspsc::UnboundedQueue;
 pub use bqueue::BQueue;
 pub use dehnavi_queue::DehnaviQueue;
 pub use dehnavi_queue::PopError;
+pub use iffq::IffqQueue;
+pub use biffq::BiffqQueue;
+pub use ffq::FfqQueue;
