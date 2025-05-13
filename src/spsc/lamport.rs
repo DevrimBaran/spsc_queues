@@ -12,7 +12,7 @@ use std::{
 #[derive(Debug)]
 pub struct LamportQueue<T: Send> {
    mask: usize, // cap − 1
-   buf : ManuallyDrop<Box<[UnsafeCell<Option<T>>]>>, // shared ring storage
+   pub buf : ManuallyDrop<Box<[UnsafeCell<Option<T>>]>>, // shared ring storage (pub so dspsc can use it)
    head: AtomicUsize, // mutated by consumer
    tail: AtomicUsize, // mutated by producer
 }

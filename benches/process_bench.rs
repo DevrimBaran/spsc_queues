@@ -16,7 +16,7 @@ use spsc_queues::{
 }; 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-const PERFORMANCE_TEST: bool = false; // Set to false for local testing
+const PERFORMANCE_TEST: bool = true; // Set to false for local testing
 
 const RING_CAP: usize = 1024; 
 const ITERS:     usize = 1_000_000; 
@@ -111,38 +111,38 @@ impl<T: Send + 'static> BenchSpscQueue<T> for DynListQueue<T> {
 
 // Implement BenchSpscQueue for IffqQueue
 impl<T: Send + 'static> BenchSpscQueue<T> for IffqQueue<T> {
-    fn bench_push(&self, item: T) -> Result<(), ()> {
-        SpscQueue::push(self, item).map_err(|_e| ()) 
-    }
-    fn bench_pop(&self) -> Result<T, ()> {
-        SpscQueue::pop(self).map_err(|_e| ())
-    }
+   fn bench_push(&self, item: T) -> Result<(), ()> {
+      SpscQueue::push(self, item).map_err(|_e| ()) 
+   }
+   fn bench_pop(&self) -> Result<T, ()> {
+      SpscQueue::pop(self).map_err(|_e| ())
+   }
 }
 
 // Implement BenchSpscQueue for BiffqQueue
 impl<T: Send + 'static> BenchSpscQueue<T> for BiffqQueue<T> {
-    fn bench_push(&self, item: T) -> Result<(), ()> {
-        SpscQueue::push(self, item).map_err(|_e| ()) 
-    }
-    fn bench_pop(&self) -> Result<T, ()> {
-        SpscQueue::pop(self).map_err(|_e| ())
-    }
+   fn bench_push(&self, item: T) -> Result<(), ()> {
+      SpscQueue::push(self, item).map_err(|_e| ()) 
+   }
+   fn bench_pop(&self) -> Result<T, ()> {
+      SpscQueue::pop(self).map_err(|_e| ())
+   }
 }
 
 // Implement BenchSpscQueue for FfqQueue
 impl<T: Send + 'static> BenchSpscQueue<T> for FfqQueue<T> {
-    fn bench_push(&self, item: T) -> Result<(), ()> {
-        SpscQueue::push(self, item).map_err(|_e| ()) 
-    }
-    fn bench_pop(&self) -> Result<T, ()> {
-        SpscQueue::pop(self).map_err(|_e| ())
-    }
+   fn bench_push(&self, item: T) -> Result<(), ()> {
+      SpscQueue::push(self, item).map_err(|_e| ()) 
+   }
+   fn bench_pop(&self) -> Result<T, ()> {
+      SpscQueue::pop(self).map_err(|_e| ())
+   }
 }
 
 
 // Dehnavi benchmark function 
 fn bench_dehnavi(c: &mut Criterion) { 
-   c.bench_function("Dehnavi (process)", |b| { 
+   c.bench_function("Dehnavi", |b| { 
       b.iter(|| { 
          let current_ring_cap = if RING_CAP <= 1 { 2 } else { RING_CAP };  
          let bytes = DehnaviQueue::<usize>::shared_size(current_ring_cap); 
@@ -160,7 +160,7 @@ fn bench_dehnavi(c: &mut Criterion) {
 
 // Lamport benchmark function 
 fn bench_lamport(c: &mut Criterion) { 
-   c.bench_function("Lamport (process)", |b| { 
+   c.bench_function("Lamport", |b| { 
       b.iter(|| { 
          let bytes   = LamportQueue::<usize>::shared_size(RING_CAP); 
          let shm_ptr = unsafe { map_shared(bytes) }; 
@@ -174,7 +174,7 @@ fn bench_lamport(c: &mut Criterion) {
 
 // B-Queue benchmark function 
 fn bench_bqueue(c: &mut Criterion) { 
-   c.bench_function("B-Queue (process)", |b| { 
+   c.bench_function("B-Queue", |b| { 
       b.iter(|| { 
          let bytes   = BQueue::<usize>::shared_size(RING_CAP); 
          let shm_ptr = unsafe { map_shared(bytes) }; 
@@ -188,7 +188,7 @@ fn bench_bqueue(c: &mut Criterion) {
 
 // Multi-Push (mspsc) benchmark function 
 fn bench_mp(c: &mut Criterion) { 
-   c.bench_function("Multi-Push (process)", |b| { 
+   c.bench_function("mSPSC", |b| { 
       b.iter(|| { 
          let bytes   = MultiPushQueue::<usize>::shared_size(RING_CAP); 
          let shm_ptr = unsafe { map_shared(bytes) }; 
@@ -208,7 +208,7 @@ fn bench_mp(c: &mut Criterion) {
 
 // dSPSC benchmark function 
 fn bench_dspsc(c: &mut Criterion) { 
-   c.bench_function("dSPSC (process - shared)", |b| { 
+   c.bench_function("dSPSC", |b| { 
       b.iter(|| { 
          let bytes = DynListQueue::<usize>::shared_size(); 
          let shm_ptr = unsafe { map_shared(bytes) }; 
@@ -226,7 +226,7 @@ fn bench_dspsc(c: &mut Criterion) {
 
 // Unbounded SPSC benchmark function 
 fn bench_unbounded(c: &mut Criterion) { 
-   c.bench_function("Unbounded (process)", |b| { 
+   c.bench_function("uSPSC", |b| { 
       b.iter(|| { 
          let size = UnboundedQueue::<usize>::shared_size(); 
          let shm_ptr = unsafe { map_shared(size) }; 
@@ -240,69 +240,69 @@ fn bench_unbounded(c: &mut Criterion) {
 
 // IFFQ benchmark function
 fn bench_iffq(c: &mut Criterion) {
-    c.bench_function("Iffq (process - shared)", |b| { 
-        b.iter(|| {
-            assert!(RING_CAP.is_power_of_two());
-            // H_PARTITION_SIZE is 32 in iffq.rs
-            assert_eq!(RING_CAP % 32, 0, "RING_CAP must be a multiple of IFFQ H_PARTITION_SIZE (32)");
-            assert!(RING_CAP >= 2 * 32, "RING_CAP must be >= 2 * IFFQ H_PARTITION_SIZE (64)");
+   c.bench_function("Iffq", |b| { 
+      b.iter(|| {
+         assert!(RING_CAP.is_power_of_two());
+         // H_PARTITION_SIZE is 32 in iffq.rs
+         assert_eq!(RING_CAP % 32, 0, "RING_CAP must be a multiple of IFFQ H_PARTITION_SIZE (32)");
+         assert!(RING_CAP >= 2 * 32, "RING_CAP must be >= 2 * IFFQ H_PARTITION_SIZE (64)");
 
-            let bytes = IffqQueue::<usize>::shared_size(RING_CAP);
-            let shm_ptr = unsafe { map_shared(bytes) };
-            let q = unsafe { IffqQueue::init_in_shared(shm_ptr, RING_CAP) };
-            
-            let dur = fork_and_run(q);
-            
-            unsafe {
-                unmap_shared(shm_ptr, bytes);
-            }
-            dur
-        })
-    });
+         let bytes = IffqQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { IffqQueue::init_in_shared(shm_ptr, RING_CAP) };
+         
+         let dur = fork_and_run(q);
+         
+         unsafe {
+               unmap_shared(shm_ptr, bytes);
+         }
+         dur
+      })
+   });
 }
 
 // BIFFQ benchmark function
 fn bench_biffq(c: &mut Criterion) {
-    c.bench_function("Biffq (process - shared)", |b| { 
-        b.iter(|| {
-            assert!(RING_CAP.is_power_of_two());
-            // H_PARTITION_SIZE is 32 in biffq.rs
-            assert_eq!(RING_CAP % 32, 0, "RING_CAP must be a multiple of BIFFQ H_PARTITION_SIZE (32)");
-            assert!(RING_CAP >= 2 * 32, "RING_CAP must be >= 2 * BIFFQ H_PARTITION_SIZE (64)");
+   c.bench_function("Biffq", |b| { 
+      b.iter(|| {
+         assert!(RING_CAP.is_power_of_two());
+         // H_PARTITION_SIZE is 32 in biffq.rs
+         assert_eq!(RING_CAP % 32, 0, "RING_CAP must be a multiple of BIFFQ H_PARTITION_SIZE (32)");
+         assert!(RING_CAP >= 2 * 32, "RING_CAP must be >= 2 * BIFFQ H_PARTITION_SIZE (64)");
 
-            let bytes = BiffqQueue::<usize>::shared_size(RING_CAP);
-            let shm_ptr = unsafe { map_shared(bytes) };
-            let q = unsafe { BiffqQueue::init_in_shared(shm_ptr, RING_CAP) };
-            
-            let dur = fork_and_run(q);
-            
-            unsafe {
-                unmap_shared(shm_ptr, bytes);
-            }
-            dur
-        })
-    });
+         let bytes = BiffqQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { BiffqQueue::init_in_shared(shm_ptr, RING_CAP) };
+         
+         let dur = fork_and_run(q);
+         
+         unsafe {
+               unmap_shared(shm_ptr, bytes);
+         }
+         dur
+      })
+   });
 }
 
 // FFQ benchmark function
 fn bench_ffq(c: &mut Criterion) {
-    c.bench_function("Ffq (process - shared)", |b| { // Naming convention for plot
-        b.iter(|| {
-            // FFQ does not have H_PARTITION_SIZE constraints, only power of two for capacity.
-            assert!(RING_CAP.is_power_of_two() && RING_CAP > 0);
+    c.bench_function("FFq", |b| { // Naming convention for plot
+      b.iter(|| {
+         // FFQ does not have H_PARTITION_SIZE constraints, only power of two for capacity.
+         assert!(RING_CAP.is_power_of_two() && RING_CAP > 0);
 
-            let bytes = FfqQueue::<usize>::shared_size(RING_CAP);
-            let shm_ptr = unsafe { map_shared(bytes) };
-            let q = unsafe { FfqQueue::init_in_shared(shm_ptr, RING_CAP) };
-            
-            let dur = fork_and_run(q);
-            
-            unsafe {
-                unmap_shared(shm_ptr, bytes);
-            }
-            dur
-        })
-    });
+         let bytes = FfqQueue::<usize>::shared_size(RING_CAP);
+         let shm_ptr = unsafe { map_shared(bytes) };
+         let q = unsafe { FfqQueue::init_in_shared(shm_ptr, RING_CAP) };
+         
+         let dur = fork_and_run(q);
+         
+         unsafe {
+               unmap_shared(shm_ptr, bytes);
+         }
+         dur
+      })
+   });
 }
 
 
@@ -345,16 +345,10 @@ where
          
          if let Some(biffq_queue) = (q as &dyn std::any::Any).downcast_ref::<BiffqQueue<usize>>() {
             for _attempt in 0..1000 { 
-                if biffq_queue.flush_producer_buffer().is_ok() {
-                    // Ideally, check if local buffer is empty.
-                    // For now, assume flush makes it empty or significantly reduces it.
-                    // A more robust check would be `biffq_queue.prod.local_count.load(Ordering::Relaxed) == 0`
-                    // but `prod` and `local_count` are private.
-                    // If the queue provides a method like `is_local_buffer_empty()`, that would be better.
-                    // For now, we assume a successful flush is good enough for the benchmark.
-                    break; 
-                }
-                std::hint::spin_loop();
+               if biffq_queue.flush_producer_buffer().is_ok() {
+                  break; 
+               }
+               std::hint::spin_loop();
             }
          }
          
@@ -416,23 +410,23 @@ where
 fn custom_criterion() -> Criterion { 
    Criterion::default() 
       .warm_up_time(Duration::from_secs(5)) 
-      .measurement_time(Duration::from_secs(20)) 
-      .sample_size(150)
+      .measurement_time(Duration::from_secs(170)) 
+      .sample_size(1000)
 } 
 
 criterion_group!{ 
    name = benches; 
    config = custom_criterion(); 
    targets = 
-      //bench_lamport, 
-      // bench_bqueue, 
-      //bench_mp, 
-      // bench_unbounded, 
+      bench_lamport, 
+      bench_bqueue, 
+      bench_mp, 
+      bench_unbounded, 
       bench_dspsc, 
-      // bench_dehnavi,
-      // bench_iffq,  
-      // bench_biffq,
-      // bench_ffq
+      bench_dehnavi,
+      bench_iffq,  
+      bench_biffq,
+      bench_ffq
 } 
 criterion_main!(benches);
 

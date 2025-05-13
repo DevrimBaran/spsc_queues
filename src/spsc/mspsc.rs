@@ -1,3 +1,5 @@
+// multipush spsc by torquati
+
 use crate::spsc::LamportQueue;
 use crate::SpscQueue;
 use core::{cell::UnsafeCell, fmt, mem::MaybeUninit, ptr};

@@ -11,16 +11,19 @@ BENCHMARK_FILE_STEM = '' # Corrected based on your path structure
 
 # IMPORTANT: Update these to the EXACT FOLDER NAMES in target/criterion/
 BENCHMARK_FUNCTION_IDS = [
-   "Lamport (process)",
-   "B-Queue (process)",
-   "Multi-Push (process)",
-   "Unbounded (process)",
-   "dSPSC (process - shared)", # Or "dSPSC (process - shared, bounded test)" if that's the folder name
-   "Dehnavi (process)",
+   "Lamport",
+   "B-Queue",
+   "mSPSC",
+   "uSPSC",
+   "dSPSC",
+   "Dehnavi",
+   "Iffq",
+   "Biffq",
+   "FFq"
 ]
 
 OUTPUT_PLOT_FILE = 'spsc_queue_performance_violin.png'
-PLOT_TITLE = 'SPSC Queue Performance Comparison (Inter-Process)'
+PLOT_TITLE = 'Performance Comparison for IPC SPSC Queues via shared memory'
 Y_AXIS_LABEL = 'Execution Time per Iteration (microseconds)'
 
 # --- Script ---
